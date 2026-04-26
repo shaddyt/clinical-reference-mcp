@@ -7,7 +7,10 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       include: ['src/**/*.ts'],
-      exclude: ['src/**/index.ts'],
+      // Bin entry points are spawned as subprocesses by integration tests;
+      // their coverage lives in the child process and isn't visible to v8
+      // here. Excluding them keeps the threshold honest.
+      exclude: ['src/**/index.ts', 'src/server/stdio.ts'],
       thresholds: {
         lines: 90,
         functions: 90,
