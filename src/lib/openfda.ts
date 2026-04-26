@@ -43,6 +43,7 @@ const LabelResultSchema = z.object({
   contraindications: z.array(z.string()).optional(),
   adverse_reactions: z.array(z.string()).optional(),
   mechanism_of_action: z.array(z.string()).optional(),
+  drug_interactions: z.array(z.string()).optional(),
   openfda: LabelOpenFdaSchema,
 });
 
@@ -88,6 +89,7 @@ export interface LabelHit {
   contraindications?: string;
   adverseReactions?: string;
   mechanism?: string;
+  drugInteractions?: string;
   raw: unknown;
 }
 
@@ -177,6 +179,7 @@ function normalizeLabel(raw: z.infer<typeof LabelResultSchema>): LabelHit {
   const contraindications = joinAndStrip(raw.contraindications);
   const adverseReactions = joinAndStrip(raw.adverse_reactions);
   const mechanism = joinAndStrip(raw.mechanism_of_action);
+  const drugInteractions = joinAndStrip(raw.drug_interactions);
 
   if (indications !== undefined) hit.indications = indications;
   if (dosage !== undefined) hit.dosage = dosage;
@@ -184,6 +187,7 @@ function normalizeLabel(raw: z.infer<typeof LabelResultSchema>): LabelHit {
   if (contraindications !== undefined) hit.contraindications = contraindications;
   if (adverseReactions !== undefined) hit.adverseReactions = adverseReactions;
   if (mechanism !== undefined) hit.mechanism = mechanism;
+  if (drugInteractions !== undefined) hit.drugInteractions = drugInteractions;
 
   return hit;
 }

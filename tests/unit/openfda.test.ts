@@ -116,6 +116,30 @@ describe('openFda.searchLabels', () => {
     expect(hit?.raw).toBeDefined();
   });
 
+  it('surfaces the drug_interactions section as drugInteractions', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({
+        results: [
+          {
+            drug_interactions: ['<p>Concomitant warfarin increases bleeding risk.</p>'],
+            openfda: { rxcui: ['1191'] },
+          },
+        ],
+      }),
+    );
+
+    const result = await openFda.searchLabels({
+      field: 'openfda.rxcui',
+      value: '1191',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data[0]?.drugInteractions).toBe(
+      'Concomitant warfarin increases bleeding risk.',
+    );
+  });
+
   it('handles missing optional fields without crashing', async () => {
     fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [{}] }));
 
