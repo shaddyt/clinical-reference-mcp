@@ -153,6 +153,7 @@ describe('openFda.searchLabels', () => {
     expect(hit?.indications).toBeUndefined();
     expect(hit?.brandName).toBeUndefined();
     expect(hit?.setId).toBeUndefined();
+    expect(hit?.drugInteractions).toBeUndefined();
   });
 
   it('returns the cached value on a second identical call without re-fetching', async () => {

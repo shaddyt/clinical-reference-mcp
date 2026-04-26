@@ -73,11 +73,28 @@ export async function findAlternativesHandler(
     });
   }
 
-  // Iterate from most specific to broadest (longer classId = deeper level
-  // in the ATC tree). The input's own ATC code typically appears as one of
-  // the classes; its members will be the input itself, which we filter out.
-  // We advance to the next-most-specific until we find a class with real
-  // siblings.
+  // Algorithm: iterate ATC classes most-specific first, return members of
+  // the first class that has siblings beyond the input drug.
+  //
+  // Why specificity-by-classId-length: ATC codes are hierarchical and
+  // strictly nest by length — "N" (group: nervous system) ⊂ "N02"
+  // (analgesics) ⊂ "N02B" (other analgesics) ⊂ "N02BA" (salicylic acid
+  // derivatives) ⊂ "N02BA01" (acetylsalicylic acid). RxNav's byRxcui
+  // returns every level the drug belongs to; the longest classId is always
+  // the most specific.
+  //
+  // Why most-specific-with-siblings: the input's own leaf-level ATC code
+  // typically has a single member (itself), so its alternatives list is
+  // empty after filtering. The next level up — the smallest enclosing
+  // group with sibling drugs — is what a clinician means by "drugs like
+  // this one." Broader levels (group, anatomical class) balloon to
+  // hundreds of unrelated members and are rarely useful; we never reach
+  // them in practice but the loop fall-through covers that case.
+  //
+  // Why sequential not parallel: cache-friendly (each class fetched at
+  // most once), respects RxNav rate limits, and lets us short-circuit as
+  // soon as we find a class with siblings — usually after one or two
+  // iterations.
   const sortedClasses = [...classes].sort(
     (a, b) => b.classId.length - a.classId.length,
   );

@@ -61,6 +61,15 @@ describe('respondError', () => {
     expect(out.disclaimer).toBe(DISCLAIMER);
   });
 
+  it('attaches disclaimer at the envelope level, not inside the error object', () => {
+    // Guards against a tempting refactor that would inline the disclaimer
+    // into the error payload — clients should read it from one place
+    // (out.disclaimer), not also have to fall back to out.error.disclaimer.
+    const out = respondError(sampleError);
+    expect(Object.keys(out)).toEqual(['ok', 'error', 'disclaimer']);
+    expect((out.error as Record<string, unknown>).disclaimer).toBeUndefined();
+  });
+
   it('does not modify the error object identity', () => {
     const out = respondError(sampleError);
     expect(out.error).toBe(sampleError);
