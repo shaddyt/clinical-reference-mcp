@@ -10,7 +10,11 @@ export default defineConfig({
       // Bin entry points are spawned as subprocesses by integration tests;
       // their coverage lives in the child process and isn't visible to v8
       // here. Excluding them keeps the threshold honest.
-      exclude: ['src/**/index.ts', 'src/server/stdio.ts'],
+      exclude: [
+        'src/**/index.ts',
+        'src/server/stdio.ts',
+        'src/server/http-bin.ts',
+      ],
       thresholds: {
         lines: 90,
         functions: 90,
