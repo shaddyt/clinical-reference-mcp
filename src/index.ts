@@ -12,3 +12,4 @@ export * from './lib/http';
 export * from './lib/version';
 export * from './lib/openfda';
 export * from './lib/rxnorm';
+export * from './lib/normalize';
