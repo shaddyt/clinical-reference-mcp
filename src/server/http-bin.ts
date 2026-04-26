@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { startHttpServer } from './http';
+import { startHttpServer } from './http-server';
 
 const port = process.env['PORT'] ? Number.parseInt(process.env['PORT'], 10) : 3000;
 
@@ -21,16 +21,12 @@ async function main(): Promise<void> {
   // exits 0 in container orchestrators (Docker, k8s) that send SIGTERM
   // before SIGKILL. SIGINT covers ctrl-c during local development.
   const shutdown = (signal: NodeJS.Signals): void => {
-    process.stderr.write(
-      `[clinical-reference-mcp] received ${signal}, shutting down\n`,
-    );
+    process.stderr.write(`[clinical-reference-mcp] received ${signal}, shutting down\n`);
     running
       .close()
       .then(() => process.exit(0))
       .catch((err: unknown) => {
-        process.stderr.write(
-          `[clinical-reference-mcp] shutdown error: ${String(err)}\n`,
-        );
+        process.stderr.write(`[clinical-reference-mcp] shutdown error: ${String(err)}\n`);
         process.exit(1);
       });
   };

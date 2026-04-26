@@ -8,3 +8,5 @@ coverage/
 .cache/
 .vitest-cache/
 .tsbuildinfo
+.wrangler/
+*.tgz

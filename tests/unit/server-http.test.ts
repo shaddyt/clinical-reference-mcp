@@ -11,11 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { HTTP_DISCLAIMER_HEADER } from '../../src/lib/safety';
 import { VERSION } from '../../src/lib/version';
-import {
-  buildHttpApp,
-  startHttpServer,
-  type RunningHttpServer,
-} from '../../src/server/http';
+import { buildHttpApp } from '../../src/server/http';
+import { startHttpServer, type RunningHttpServer } from '../../src/server/http-server';
 
 describe('buildHttpApp', () => {
   it('returns a Hono instance', () => {
@@ -47,17 +44,13 @@ describe('buildHttpApp', () => {
   it('attaches the disclaimer header to /health responses', async () => {
     const app = buildHttpApp();
     const response = await app.fetch(new Request('http://test/health'));
-    expect(response.headers.get(HTTP_DISCLAIMER_HEADER)).toMatch(
-      /Not for clinical use/,
-    );
+    expect(response.headers.get(HTTP_DISCLAIMER_HEADER)).toMatch(/Not for clinical use/);
   });
 
   it('attaches the disclaimer header to / responses', async () => {
     const app = buildHttpApp();
     const response = await app.fetch(new Request('http://test/'));
-    expect(response.headers.get(HTTP_DISCLAIMER_HEADER)).toMatch(
-      /Not for clinical use/,
-    );
+    expect(response.headers.get(HTTP_DISCLAIMER_HEADER)).toMatch(/Not for clinical use/);
   });
 
   it('responds to CORS preflight on /mcp', async () => {
@@ -74,9 +67,7 @@ describe('buildHttpApp', () => {
     );
     expect(response.status).toBeLessThan(300);
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
-    expect(response.headers.get('access-control-allow-methods')).toMatch(
-      /POST/,
-    );
+    expect(response.headers.get('access-control-allow-methods')).toMatch(/POST/);
   });
 
   it('exposes the disclaimer header in CORS exposeHeaders', async () => {
@@ -86,9 +77,9 @@ describe('buildHttpApp', () => {
         headers: { Origin: 'https://example.com' },
       }),
     );
-    expect(
-      response.headers.get('access-control-expose-headers')?.toLowerCase(),
-    ).toContain(HTTP_DISCLAIMER_HEADER.toLowerCase());
+    expect(response.headers.get('access-control-expose-headers')?.toLowerCase()).toContain(
+      HTTP_DISCLAIMER_HEADER.toLowerCase(),
+    );
   });
 });
 
@@ -103,10 +94,7 @@ describe('startHttpServer + /mcp end-to-end', () => {
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://localhost:${running.port}/mcp`),
     );
-    client = new Client(
-      { name: 'http-integration-test', version: '0.0.0' },
-      { capabilities: {} },
-    );
+    client = new Client({ name: 'http-integration-test', version: '0.0.0' }, { capabilities: {} });
     // SDK's StreamableHTTPClientTransport exposes sessionId as a getter
     // typed `string | undefined`, while Transport declares `sessionId?:
     // string`. Under exactOptionalPropertyTypes the shapes diverge even

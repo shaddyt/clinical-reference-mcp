@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { serve } from '@hono/node-server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -57,17 +56,8 @@ export function buildHttpApp(): Hono {
     cors({
       origin: '*',
       allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-      allowHeaders: [
-        'Content-Type',
-        'mcp-session-id',
-        'Last-Event-ID',
-        'mcp-protocol-version',
-      ],
-      exposeHeaders: [
-        'mcp-session-id',
-        'mcp-protocol-version',
-        HTTP_DISCLAIMER_HEADER,
-      ],
+      allowHeaders: ['Content-Type', 'mcp-session-id', 'Last-Event-ID', 'mcp-protocol-version'],
+      exposeHeaders: ['mcp-session-id', 'mcp-protocol-version', HTTP_DISCLAIMER_HEADER],
     }),
   );
 
@@ -103,28 +93,4 @@ export function buildHttpApp(): Hono {
   });
 
   return app;
-}
-
-export interface RunningHttpServer {
-  port: number;
-  close: () => Promise<void>;
-}
-
-export function startHttpServer(port = 3000): Promise<RunningHttpServer> {
-  const app = buildHttpApp();
-  return new Promise((resolve, reject) => {
-    const server = serve({ fetch: app.fetch, port }, (info) => {
-      resolve({
-        port: info.port,
-        close: () =>
-          new Promise<void>((resolveClose, rejectClose) => {
-            server.close((err) => {
-              if (err) rejectClose(err);
-              else resolveClose();
-            });
-          }),
-      });
-    });
-    server.on('error', reject);
-  });
 }

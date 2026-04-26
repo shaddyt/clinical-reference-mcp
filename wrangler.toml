@@ -1,0 +1,13 @@
+name = "clinical-reference-mcp"
+main = "src/server/worker.ts"
+compatibility_date = "2026-04-26"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# Custom domain — bound after the shaddyt.space DNS migration to Cloudflare
+# completes. Until then, the Worker is reachable at its workers.dev URL only.
+[[routes]]
+pattern = "clinical-reference.shaddyt.space"
+custom_domain = true
