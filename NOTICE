@@ -1,0 +1,25 @@
+clinical-reference-mcp
+Copyright 2026 Shadrack Omary
+
+This product includes references to data and APIs published by the U.S. Food
+and Drug Administration and the U.S. National Library of Medicine:
+
+  - openFDA — U.S. Food and Drug Administration
+    https://open.fda.gov
+
+  - RxNorm — U.S. National Library of Medicine
+    https://www.nlm.nih.gov/research/umls/rxnorm/
+
+  - RxNav — U.S. National Library of Medicine
+    https://rxnav.nlm.nih.gov/
+
+These sources are publicly available. This software is independent of, and
+not endorsed by, the U.S. Food and Drug Administration or the U.S. National
+Library of Medicine.
+
+================================================================================
+Project notice (informational, not part of the Apache 2.0 NOTICE requirement):
+
+This software is provided for software-development reference. It is not a
+medical device, is not intended for clinical use, and must not be used to
+diagnose, treat, or make medical decisions about any individual.

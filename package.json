@@ -1,0 +1,73 @@
+{
+  "name": "@shaddyt/clinical-reference-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing drug, prescription, and pharmacology reference tools sourced from authoritative public APIs (openFDA, RxNorm/RxNav). Developer reference, not for clinical use.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "openfda",
+    "rxnorm",
+    "rxnav",
+    "drug-reference",
+    "pharmacology",
+    "healthcare-ai"
+  ],
+  "homepage": "https://github.com/shaddyt/clinical-reference-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaddyt/clinical-reference-mcp.git"
+  },
+  "bugs": "https://github.com/shaddyt/clinical-reference-mcp/issues",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Shadrack Omary",
+    "email": "goldenshaddyt@gmail.com",
+    "url": "https://shaddyt.space"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^2.1.8"
+  }
+}
