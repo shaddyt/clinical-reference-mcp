@@ -11,7 +11,11 @@ export default defineConfig({
       // their coverage lives in the child process and isn't visible to v8
       // here. Excluding them keeps the threshold honest.
       exclude: [
-        'src/**/index.ts',
+        // The library barrel re-exports only; nothing of substance to cover.
+        'src/index.ts',
+        // Bin entry points are spawned as subprocesses by integration tests;
+        // their coverage lives in the child process and isn't visible to v8
+        // here. Excluding them keeps the threshold honest.
         'src/server/stdio.ts',
         'src/server/http-bin.ts',
       ],
