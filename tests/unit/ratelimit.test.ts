@@ -123,6 +123,26 @@ describe('RateLimiter.acquire', () => {
     // Bucket should now be empty — a synchronous tryAcquire must fail.
     expect(limiter.tryAcquire()).toBe(false);
   });
+
+  it('fully refills a drained bucket after one interval at openFDA scale (240/min)', () => {
+    // Production-scale check: drain the openFDA-shaped bucket completely,
+    // advance one full interval, and confirm every token is available again.
+    const limiter = new RateLimiter({
+      tokensPerInterval: 240,
+      intervalMs: 60_000,
+    });
+    for (let i = 0; i < 240; i++) {
+      expect(limiter.tryAcquire()).toBe(true);
+    }
+    expect(limiter.tryAcquire()).toBe(false);
+
+    vi.advanceTimersByTime(60_000);
+
+    for (let i = 0; i < 240; i++) {
+      expect(limiter.tryAcquire()).toBe(true);
+    }
+    expect(limiter.tryAcquire()).toBe(false);
+  });
 });
 
 describe('singleton limiters', () => {
