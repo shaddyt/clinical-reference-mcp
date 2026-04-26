@@ -8,3 +8,5 @@ export * from './lib/citations';
 export * from './lib/types';
 export * from './lib/cache';
 export * from './lib/ratelimit';
+export * from './lib/http';
+export * from './lib/version';

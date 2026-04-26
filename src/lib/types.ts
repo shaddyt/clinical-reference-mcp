@@ -34,6 +34,10 @@ export const ToolErrorSchema = z.object({
   code: ErrorCodeSchema,
   message: z.string(),
   candidates: z.array(AmbiguousMatchSchema).optional(),
+  // Hints to a higher-level retry policy that the same call may succeed if
+  // tried again later (429s, 5xx after retries exhausted, network failures).
+  // Absent or false means the failure is structural and a retry won't help.
+  retryable: z.boolean().optional(),
 });
 
 // ---------- Shared field validators ----------
@@ -171,6 +175,13 @@ export type Citation = z.infer<typeof CitationSchema>;
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 export type AmbiguousMatch = z.infer<typeof AmbiguousMatchSchema>;
 export type ToolError = z.infer<typeof ToolErrorSchema>;
+
+// Discriminated success/failure envelope used across every client boundary
+// (http wrapper, openFDA, RxNorm, normalizer). Errors are always typed with
+// our four-code taxonomy — no throwing across the public boundary.
+export type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: ToolError };
 
 export type LookupDrugInput = z.infer<typeof LookupDrugInputSchema>;
 export type LookupDrugOutput = z.infer<typeof LookupDrugOutputSchema>;

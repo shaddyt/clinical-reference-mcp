@@ -148,4 +148,18 @@ describe('ToolErrorSchema', () => {
       }),
     ).toBeTruthy();
   });
+  it('accepts a retryable upstream error', () => {
+    expect(
+      ToolErrorSchema.parse({
+        code: 'UPSTREAM_ERROR',
+        message: 'service unavailable',
+        retryable: true,
+      }),
+    ).toMatchObject({ retryable: true });
+  });
+  it('treats retryable as optional', () => {
+    expect(
+      ToolErrorSchema.parse({ code: 'INVALID_INPUT', message: 'bad' }),
+    ).not.toHaveProperty('retryable');
+  });
 });
