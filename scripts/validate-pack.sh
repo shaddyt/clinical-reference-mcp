@@ -12,6 +12,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Read the version from package.json so the smoke check tracks releases
+# without manual edits. Uses node so we don't depend on jq being installed.
+PKG_VERSION="$(node -p "require('./package.json').version")"
+
 echo "==> pnpm pack"
 rm -f shaddyt-clinical-reference-mcp-*.tgz
 pnpm pack >/dev/null
@@ -111,8 +115,8 @@ cp "$TARBALL" "$SMOKE/"
   npm init -y >/dev/null 2>&1
   npm install "./$TARBALL" --no-audit --no-fund --silent >/dev/null
   VERSION_OUTPUT="$(npx --no-install clinical-reference --version 2>&1)"
-  if [[ "$VERSION_OUTPUT" != "0.1.0" ]]; then
-    echo "FAIL: CLI --version returned '$VERSION_OUTPUT' (expected '0.1.0')" >&2
+  if [[ "$VERSION_OUTPUT" != "$PKG_VERSION" ]]; then
+    echo "FAIL: CLI --version returned '$VERSION_OUTPUT' (expected '$PKG_VERSION')" >&2
     exit 1
   fi
 )

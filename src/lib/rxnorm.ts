@@ -64,20 +64,11 @@ export interface ClassMember {
 }
 
 export interface RxNormClient {
-  approximateMatch(
-    name: string,
-    maxEntries?: number,
-  ): Promise<Result<MatchCandidate[]>>;
+  approximateMatch(name: string, maxEntries?: number): Promise<Result<MatchCandidate[]>>;
   getProperties(rxcui: string): Promise<Result<DrugProperties>>;
-  getRelated(
-    rxcui: string,
-    relationships: RelatedTty[],
-  ): Promise<Result<RelatedConcept[]>>;
+  getRelated(rxcui: string, relationships: RelatedTty[]): Promise<Result<RelatedConcept[]>>;
   getClasses(rxcui: string): Promise<Result<DrugClass[]>>;
-  getClassMembers(
-    classId: string,
-    ttys?: string[],
-  ): Promise<Result<ClassMember[]>>;
+  getClassMembers(classId: string, ttys?: string[]): Promise<Result<ClassMember[]>>;
 }
 
 // ---------- Boundary schemas ----------
@@ -86,9 +77,13 @@ export interface RxNormClient {
 // where numbers should be. We coerce at the boundary and normalize to clean
 // shapes for callers; everything downstream can assume well-formed data.
 
+// RxNav omits `name` for alias rows from some terminology sources (GS,
+// NDDF, MMSL). The boundary accepts those rows; the client filters them
+// before returning, so downstream MatchCandidate keeps its `name: string`
+// guarantee.
 const ApproximateCandidateSchema = z.object({
   rxcui: z.string(),
-  name: z.string(),
+  name: z.string().optional(),
   score: z.coerce.number(),
   rank: z.coerce.number(),
   source: z.string(),
@@ -240,12 +235,17 @@ class DefaultRxNormClient implements RxNormClient {
       if (!parsed.success) {
         return {
           ok: false,
-          error: shapeError(
-            'RxNav approximateTerm response did not match expected shape',
-          ),
+          error: shapeError('RxNav approximateTerm response did not match expected shape'),
         };
       }
-      const candidates = parsed.data.approximateGroup.candidate ?? [];
+      // RxNav alias rows from terminology sources without a `name` carry
+      // no display string and are useless to consumers that need one. Drop
+      // them at the boundary so MatchCandidate's `name: string` invariant
+      // holds for everything downstream.
+      const candidates =
+        parsed.data.approximateGroup.candidate?.filter(
+          (c): c is MatchCandidate => typeof c.name === 'string',
+        ) ?? [];
       return { ok: true, data: candidates };
     });
   }
@@ -260,9 +260,7 @@ class DefaultRxNormClient implements RxNormClient {
       if (!parsed.success) {
         return {
           ok: false,
-          error: shapeError(
-            'RxNav properties response did not match expected shape',
-          ),
+          error: shapeError('RxNav properties response did not match expected shape'),
         };
       }
       const props = parsed.data.properties;
@@ -283,10 +281,7 @@ class DefaultRxNormClient implements RxNormClient {
     });
   }
 
-  getRelated(
-    rxcui: string,
-    relationships: RelatedTty[],
-  ): Promise<Result<RelatedConcept[]>> {
+  getRelated(rxcui: string, relationships: RelatedTty[]): Promise<Result<RelatedConcept[]>> {
     const url = buildRelatedUrl(rxcui, relationships);
     return fetchAndCache(url, (data) => {
       const parsed = RelatedResponseSchema.safeParse(data);
@@ -296,9 +291,7 @@ class DefaultRxNormClient implements RxNormClient {
       if (!parsed.success) {
         return {
           ok: false,
-          error: shapeError(
-            'RxNav related response did not match expected shape',
-          ),
+          error: shapeError('RxNav related response did not match expected shape'),
         };
       }
       const groups = parsed.data.relatedGroup.conceptGroup ?? [];
@@ -322,9 +315,7 @@ class DefaultRxNormClient implements RxNormClient {
       if (!parsed.success) {
         return {
           ok: false,
-          error: shapeError(
-            'RxNav byRxcui response did not match expected shape',
-          ),
+          error: shapeError('RxNav byRxcui response did not match expected shape'),
         };
       }
       const list = parsed.data.rxclassDrugInfoList?.rxclassDrugInfo ?? [];
@@ -351,9 +342,7 @@ class DefaultRxNormClient implements RxNormClient {
       if (!parsed.success) {
         return {
           ok: false,
-          error: shapeError(
-            'RxNav classMembers response did not match expected shape',
-          ),
+          error: shapeError('RxNav classMembers response did not match expected shape'),
         };
       }
       const members = parsed.data.drugMemberGroup?.drugMember ?? [];

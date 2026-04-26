@@ -27,9 +27,7 @@ beforeEach(() => {
 
 describe('rxNorm.approximateMatch', () => {
   it('builds the approximateTerm URL with default maxEntries', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ approximateGroup: { candidate: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ approximateGroup: { candidate: [] } }));
 
     await rxNorm.approximateMatch('tylenol');
 
@@ -42,9 +40,7 @@ describe('rxNorm.approximateMatch', () => {
   });
 
   it('passes a caller-supplied maxEntries through', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ approximateGroup: { candidate: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ approximateGroup: { candidate: [] } }));
 
     await rxNorm.approximateMatch('aspirin', 12);
 
@@ -112,9 +108,7 @@ describe('rxNorm.approximateMatch', () => {
   });
 
   it('returns an empty array when candidate is null', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ approximateGroup: { candidate: null } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ approximateGroup: { candidate: null } }));
 
     const result = await rxNorm.approximateMatch('nonsense');
     expect(result.ok).toBe(true);
@@ -122,9 +116,7 @@ describe('rxNorm.approximateMatch', () => {
   });
 
   it('returns an empty array when candidate is missing entirely', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ approximateGroup: {} }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ approximateGroup: {} }));
 
     const result = await rxNorm.approximateMatch('nonsense');
     expect(result.ok).toBe(true);
@@ -136,6 +128,63 @@ describe('rxNorm.approximateMatch', () => {
     const result = await rxNorm.approximateMatch('x');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('UPSTREAM_ERROR');
+  });
+
+  // Regression for the v0.1.0 launch bug: live RxNav returns alias rows
+  // from terminology sources (GS, NDDF, MMSL) that include rxaui/rxcui
+  // but no `name`. The boundary parser must accept these and the client
+  // must filter them out so MatchCandidate.name stays a guaranteed string
+  // for downstream consumers. This fixture mirrors the live shape from
+  // GET /REST/approximateTerm.json?term=aspirin&maxEntries=5.
+  it('drops candidates without a name (RxNav alias rows from GS/NDDF/MMSL)', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({
+        approximateGroup: {
+          inputTerm: null,
+          candidate: [
+            {
+              rxcui: '1191',
+              rxaui: '10284033',
+              name: 'Aspirin',
+              score: '10.36',
+              rank: '1',
+              source: 'USP',
+            },
+            {
+              rxcui: '1191',
+              rxaui: '10324038',
+              score: '10.36',
+              rank: '1',
+              source: 'GS',
+            },
+            {
+              rxcui: '1191',
+              rxaui: '12250966',
+              name: 'aspirin',
+              score: '10.36',
+              rank: '1',
+              source: 'RXNORM',
+            },
+            {
+              rxcui: '1191',
+              rxaui: '3719790',
+              score: '10.36',
+              rank: '1',
+              source: 'NDDF',
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await rxNorm.approximateMatch('aspirin');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toEqual([
+      { rxcui: '1191', name: 'Aspirin', score: 10.36, rank: 1, source: 'USP' },
+      { rxcui: '1191', name: 'aspirin', score: 10.36, rank: 1, source: 'RXNORM' },
+    ]);
   });
 });
 
@@ -201,9 +250,7 @@ describe('rxNorm.getProperties', () => {
 
 describe('rxNorm.getRelated', () => {
   it('joins requested term types with "+" in the tty query param', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ relatedGroup: { conceptGroup: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ relatedGroup: { conceptGroup: [] } }));
 
     await rxNorm.getRelated('161', ['IN', 'BN']);
 
@@ -219,15 +266,11 @@ describe('rxNorm.getRelated', () => {
           conceptGroup: [
             {
               tty: 'IN',
-              conceptProperties: [
-                { rxcui: '161', name: 'Acetaminophen', tty: 'IN' },
-              ],
+              conceptProperties: [{ rxcui: '161', name: 'Acetaminophen', tty: 'IN' }],
             },
             {
               tty: 'BN',
-              conceptProperties: [
-                { rxcui: '202433', name: 'Tylenol', tty: 'BN' },
-              ],
+              conceptProperties: [{ rxcui: '202433', name: 'Tylenol', tty: 'BN' }],
             },
           ],
         },
@@ -258,9 +301,7 @@ describe('rxNorm.getRelated', () => {
             { tty: 'SCD', conceptProperties: null },
             {
               tty: 'IN',
-              conceptProperties: [
-                { rxcui: '161', name: 'Acetaminophen', tty: 'IN' },
-              ],
+              conceptProperties: [{ rxcui: '161', name: 'Acetaminophen', tty: 'IN' }],
             },
           ],
         },
@@ -269,9 +310,7 @@ describe('rxNorm.getRelated', () => {
 
     const result = await rxNorm.getRelated('161', ['IN', 'SCD']);
     if (!result.ok) throw new Error('expected ok');
-    expect(result.data).toEqual([
-      { rxcui: '161', name: 'Acetaminophen', tty: 'IN' },
-    ]);
+    expect(result.data).toEqual([{ rxcui: '161', name: 'Acetaminophen', tty: 'IN' }]);
   });
 });
 
@@ -323,9 +362,7 @@ describe('rxNorm.getClasses', () => {
   });
 
   it('returns [] for an empty rxclassDrugInfoList', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ rxclassDrugInfoList: {} }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ rxclassDrugInfoList: {} }));
     const result = await rxNorm.getClasses('99999');
     if (!result.ok) throw new Error('expected ok');
     expect(result.data).toEqual([]);
@@ -336,9 +373,7 @@ describe('rxNorm.getClasses', () => {
 
 describe('rxNorm.getClassMembers', () => {
   it('builds the classMembers URL with default ttys=IN', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ drugMemberGroup: { drugMember: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ drugMemberGroup: { drugMember: [] } }));
 
     await rxNorm.getClassMembers('N02BE');
 
@@ -350,9 +385,7 @@ describe('rxNorm.getClassMembers', () => {
   });
 
   it('joins multiple ttys with "+"', async () => {
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ drugMemberGroup: { drugMember: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ drugMemberGroup: { drugMember: [] } }));
 
     await rxNorm.getClassMembers('N02BE', ['IN', 'PIN']);
 
@@ -402,9 +435,7 @@ describe('rxNorm — caching and rate limiting', () => {
 
   it('acquires a token from the RxNav rate limiter on miss', async () => {
     const acquireSpy = vi.spyOn(rxNavLimiter, 'acquire');
-    fetchJsonMock.mockResolvedValueOnce(
-      httpSuccess({ approximateGroup: { candidate: [] } }),
-    );
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ approximateGroup: { candidate: [] } }));
 
     await rxNorm.approximateMatch('x');
 

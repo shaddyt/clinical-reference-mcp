@@ -1,6 +1,6 @@
 {
   "name": "@shaddyt/clinical-reference-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server exposing drug, prescription, and pharmacology reference tools sourced from authoritative public APIs (openFDA, RxNorm/RxNav). Developer reference, not for clinical use.",
   "keywords": [
     "mcp",
