@@ -1,8 +1,30 @@
 # Releases
 
+## v0.1.2 — 2026-04-27
+
+A second post-launch patch on the same Sunday, addressing a follow-on bug surfaced by the v0.1.1 smoke test. Once name-less candidates were filtered (v0.1.1), `lookup_drug` for common drugs like `aspirin` started returning `AMBIGUOUS_QUERY` — because RxNav returns one row per terminology source (USP, RXNORM, VANDF, MMSL) for the same drug, all sharing one RxCUI but varying in case-folding of the name. v0.1.2 collapses these to a single resolved match.
+
+### Fixed since v0.1.1
+
+- **`lookup_drug` now resolves common drug names directly instead of asking callers to disambiguate identical RxCUIs.** When every approximate-match candidate points at the same RxCUI, the resolver returns `resolved` with the RXNORM source's canonical name (e.g. `aspirin` rather than `Aspirin`/`ASPIRIN`). True multi-drug ambiguity (distinct RxCUIs) still returns `AMBIGUOUS_QUERY` unchanged. ([fc1f491](https://github.com/shaddyt/clinical-reference-mcp/commit/fc1f491))
+
+Two regression tests in `tests/unit/normalize.test.ts` lock the new behavior — one mirrors the live `aspirin` shape, one covers the fallback path when no RXNORM-sourced row is present.
+
+### What's in v0.1.2
+
+Same six tools and three transports as v0.1.1; no public-contract changes. The package surface, MCP tool names, response envelopes, and CLI commands are unchanged.
+
+### Acknowledgments
+
+Same upstream sources as prior versions ([NOTICE](NOTICE)). The MCP specification and TypeScript SDK are maintained by Anthropic.
+
+---
+
 ## v0.1.1 — 2026-04-27
 
-This is the first version of `@shaddyt/clinical-reference-mcp` recommended for use. v0.1.0 shipped to npm earlier the same weekend but had an unintentional bug in the RxNav boundary parser that prevented `lookup_drug` from resolving most common drug names. v0.1.1 fixes that bug and is the canonical first release.
+_Superseded by v0.1.2, which fixes a follow-on resolver bug surfaced by the v0.1.1 smoke test. Install `@shaddyt/clinical-reference-mcp@latest` to get v0.1.2._
+
+This was the first version of `@shaddyt/clinical-reference-mcp` recommended for use. v0.1.0 shipped to npm earlier the same weekend but had an unintentional bug in the RxNav boundary parser that prevented `lookup_drug` from resolving most common drug names. v0.1.1 fixed that boundary bug.
 
 ### Fixed since v0.1.0
 
