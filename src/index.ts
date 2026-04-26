@@ -11,3 +11,4 @@ export * from './lib/ratelimit';
 export * from './lib/http';
 export * from './lib/version';
 export * from './lib/openfda';
+export * from './lib/rxnorm';
