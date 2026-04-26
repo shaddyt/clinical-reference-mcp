@@ -36,9 +36,7 @@ export type NormalizeResult =
   | { kind: 'not_found' }
   | { kind: 'error'; error: ToolError };
 
-export async function normalizeDrugName(
-  input: string,
-): Promise<NormalizeResult> {
+export async function normalizeDrugName(input: string): Promise<NormalizeResult> {
   const trimmed = input.trim();
 
   if (trimmed.length === 0) {
@@ -87,12 +85,25 @@ export async function normalizeDrugName(
     };
   }
 
+  // RxNav returns one candidate row per terminology source (USP, RXNORM,
+  // VANDF, MMSL...) for the same drug, varying only by the source's
+  // preferred capitalization of the name. If every surviving candidate
+  // points at the same RxCUI, there's nothing to disambiguate — every
+  // downstream tool keys on the RxCUI, not the display string. Prefer the
+  // RXNORM source's canonical name when present, otherwise the top match.
+  const uniqueRxcuis = new Set(candidates.map((c) => c.rxcui));
+  if (uniqueRxcuis.size === 1) {
+    const canonical = candidates.find((c) => c.source === 'RXNORM') ?? top;
+    return {
+      kind: 'resolved',
+      rxcui: canonical.rxcui,
+      name: canonical.name,
+      source: 'approximate',
+    };
+  }
+
   const runnerUp = candidates[1];
-  if (
-    runnerUp &&
-    top.score >= DECISIVE_SCORE &&
-    top.score - runnerUp.score >= DECISIVE_GAP
-  ) {
+  if (runnerUp && top.score >= DECISIVE_SCORE && top.score - runnerUp.score >= DECISIVE_GAP) {
     return {
       kind: 'resolved',
       rxcui: top.rxcui,

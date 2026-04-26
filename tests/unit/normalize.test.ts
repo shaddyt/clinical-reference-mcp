@@ -27,12 +27,7 @@ beforeEach(() => {
   propertiesMock.mockReset();
 });
 
-function candidate(
-  rxcui: string,
-  name: string,
-  score: number,
-  rank = 1,
-): MatchCandidate {
+function candidate(rxcui: string, name: string, score: number, rank = 1): MatchCandidate {
   return { rxcui, name, score, rank, source: 'RXNORM' };
 }
 
@@ -151,10 +146,7 @@ describe('normalizeDrugName — approximate matching', () => {
   it('resolves with source=exact when top score ≥ 90 and beats runner-up by ≥ 5', async () => {
     approximateMock.mockResolvedValueOnce({
       ok: true,
-      data: [
-        candidate('161', 'Acetaminophen', 95, 1),
-        candidate('999', 'Other', 80, 2),
-      ],
+      data: [candidate('161', 'Acetaminophen', 95, 1), candidate('999', 'Other', 80, 2)],
     });
 
     const result = await normalizeDrugName('acetaminophen');
@@ -170,10 +162,7 @@ describe('normalizeDrugName — approximate matching', () => {
   it('treats top score = 90 and runner-up = 85 as exact (boundary)', async () => {
     approximateMock.mockResolvedValueOnce({
       ok: true,
-      data: [
-        candidate('161', 'Acetaminophen', 90, 1),
-        candidate('999', 'Other', 85, 2),
-      ],
+      data: [candidate('161', 'Acetaminophen', 90, 1), candidate('999', 'Other', 85, 2)],
     });
 
     const result = await normalizeDrugName('acetaminophen');
@@ -184,10 +173,7 @@ describe('normalizeDrugName — approximate matching', () => {
   it('returns ambiguous when top score is high but the gap is too small', async () => {
     approximateMock.mockResolvedValueOnce({
       ok: true,
-      data: [
-        candidate('1', 'Drug A', 95, 1),
-        candidate('2', 'Drug B', 93, 2),
-      ],
+      data: [candidate('1', 'Drug A', 95, 1), candidate('2', 'Drug B', 93, 2)],
     });
 
     const result = await normalizeDrugName('drug');
@@ -206,15 +192,73 @@ describe('normalizeDrugName — approximate matching', () => {
   it('returns ambiguous when top score is below 90', async () => {
     approximateMock.mockResolvedValueOnce({
       ok: true,
-      data: [
-        candidate('1', 'Drug A', 85, 1),
-        candidate('2', 'Drug B', 70, 2),
-      ],
+      data: [candidate('1', 'Drug A', 85, 1), candidate('2', 'Drug B', 70, 2)],
     });
 
     const result = await normalizeDrugName('drug');
 
     expect(result.kind).toBe('ambiguous');
+  });
+
+  // Regression for the v0.1.1 launch bug surfaced by `lookup-drug aspirin`:
+  // RxNav returns one row per terminology source for the same drug. When
+  // every row collapses to the same RxCUI, the resolver must return
+  // resolved (not ambiguous), preferring the RXNORM source's canonical
+  // name. This fixture mirrors the live shape from `aspirin`.
+  it('collapses multi-source candidates that share an RxCUI to resolved', async () => {
+    approximateMock.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { rxcui: '1191', name: 'Aspirin', score: 10.36, rank: 1, source: 'USP' },
+        {
+          rxcui: '1191',
+          name: 'aspirin',
+          score: 10.36,
+          rank: 1,
+          source: 'RXNORM',
+        },
+        {
+          rxcui: '1191',
+          name: 'ASPIRIN',
+          score: 10.36,
+          rank: 1,
+          source: 'VANDF',
+        },
+      ],
+    });
+
+    const result = await normalizeDrugName('aspirin');
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind === 'resolved') {
+      expect(result.rxcui).toBe('1191');
+      expect(result.name).toBe('aspirin');
+      expect(result.source).toBe('approximate');
+    }
+  });
+
+  it('falls back to the top candidate when no RXNORM-sourced row exists', async () => {
+    approximateMock.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { rxcui: '1191', name: 'Aspirin', score: 10.36, rank: 1, source: 'USP' },
+        {
+          rxcui: '1191',
+          name: 'ASPIRIN',
+          score: 10.36,
+          rank: 1,
+          source: 'VANDF',
+        },
+      ],
+    });
+
+    const result = await normalizeDrugName('aspirin');
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind === 'resolved') {
+      expect(result.rxcui).toBe('1191');
+      expect(result.name).toBe('Aspirin');
+    }
   });
 
   it('passes the trimmed query to approximateMatch', async () => {
