@@ -6,3 +6,5 @@
 export * from './lib/safety';
 export * from './lib/citations';
 export * from './lib/types';
+export * from './lib/cache';
+export * from './lib/ratelimit';
