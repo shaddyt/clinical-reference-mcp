@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import chalk, { type ChalkInstance } from 'chalk';
 import { Command } from 'commander';
@@ -338,14 +339,27 @@ async function main(): Promise<void> {
   await program.parseAsync(process.argv);
 }
 
-// Only invoke main() when this file is the script entry point — not when
-// it's imported by tests. pathToFileURL is the canonical Node pattern for
-// "is this the script Node was launched with?" and works on Windows where
-// argv[1] uses backslash separators.
-const entryUrl = process.argv[1]
-  ? pathToFileURL(process.argv[1]).href
-  : undefined;
-if (entryUrl !== undefined && import.meta.url === entryUrl) {
+// Only invoke main() when this file is the script entry point - not when
+// it's imported by tests. We compare realpath(argv[1]) to the module's
+// own filesystem path because import.meta.url always points at the
+// canonical path (Node resolves symlinks during module load), while
+// argv[1] preserves whatever path the user / package manager passed
+// in. On macOS those diverge whenever the path contains a symlinked
+// segment (e.g. /tmp -> /private/tmp), and on Linux they diverge under
+// pnpm's content-addressable node_modules. realpathSync collapses the
+// difference; the try/catch handles the rare case where argv[1] points
+// at something that no longer exists on disk.
+function isModuleEntryPoint(): boolean {
+  const entryArg = process.argv[1];
+  if (entryArg === undefined) return false;
+  try {
+    return realpathSync(entryArg) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isModuleEntryPoint()) {
   main().catch((err: unknown) => {
     process.stderr.write(`[clinical-reference] fatal: ${String(err)}\n`);
     process.exit(1);
