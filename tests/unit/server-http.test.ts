@@ -165,6 +165,95 @@ describe('startHttpServer + /mcp end-to-end', () => {
   });
 });
 
+describe('GET / interactive demo page', () => {
+  // The page is the public demo surface. These assertions guard against
+  // regressions where someone edits the inline HTML and accidentally
+  // drops the disclaimer, breaks the install snippets, or changes a tool
+  // name without updating the dropdown.
+
+  async function fetchLandingPage(): Promise<string> {
+    const app = buildHttpApp();
+    const response = await app.fetch(new Request('http://test/'));
+    return response.text();
+  }
+
+  it('includes the package name in <title> and as a heading', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toMatch(/<title>[^<]*clinical-reference-mcp[^<]*<\/title>/);
+    expect(body).toMatch(/<h1>clinical-reference-mcp<\/h1>/);
+  });
+
+  it('renders the version from src/lib/version.ts in both header and footer', async () => {
+    const body = await fetchLandingPage();
+    // 'v' + VERSION appears at least twice (header version line + footer link bar)
+    const occurrences = body.split(`v${VERSION}`).length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders the disclaimer text verbatim from src/lib/safety.ts', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toContain(DISCLAIMER);
+    // Sub-line that contextualizes the demo specifically.
+    expect(body).toContain('This demo runs against live FDA and NIH data');
+  });
+
+  it('lists all 6 MCP tool names in the page', async () => {
+    const body = await fetchLandingPage();
+    for (const toolName of [
+      'lookup_drug',
+      'get_drug_label',
+      'check_interactions',
+      'find_alternatives',
+      'lookup_adverse_events',
+      'get_dosing_reference',
+    ]) {
+      expect(body).toContain(toolName);
+    }
+  });
+
+  it('contains the npx install command', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toContain('npx -y @shaddyt/clinical-reference-mcp');
+  });
+
+  it('contains the Claude Desktop / Claude Code MCP config block', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toContain('"mcpServers"');
+    expect(body).toContain('"clinical-reference"');
+    expect(body).toContain('"@shaddyt/clinical-reference-mcp"');
+  });
+
+  it('links to the GitHub repository and the npm package', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toContain('github.com/shaddyt/clinical-reference-mcp');
+    expect(body).toContain('npmjs.com/package/@shaddyt/clinical-reference-mcp');
+  });
+
+  it('declares the viewport meta tag for mobile rendering', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toMatch(/<meta\s+name="viewport"\s+content="width=device-width/);
+  });
+
+  it('shows a noscript notice so the demo region degrades gracefully', async () => {
+    const body = await fetchLandingPage();
+    expect(body).toMatch(/<noscript>[\s\S]*JavaScript[\s\S]*<\/noscript>/);
+  });
+
+  it('keeps the served payload ASCII-only (header propagation safety)', async () => {
+    // Disclaimer text rides in the X-Clinical-Reference-Disclaimer header on
+    // every response; non-ASCII bytes anywhere in the served constant
+    // would risk breaking that propagation in the future. Lock it in.
+    const body = await fetchLandingPage();
+    // eslint-disable-next-line no-control-regex
+    expect(body).not.toMatch(/[^\x00-\x7F]/);
+  });
+
+  it('keeps the served payload under the 25 KB ceiling', async () => {
+    const body = await fetchLandingPage();
+    expect(body.length).toBeLessThan(25 * 1024);
+  });
+});
+
 describe('POST /api/tool/:name (demo backend)', () => {
   it('dispatches a valid tool name to the matching handler and returns the envelope', async () => {
     lookupDrugMock.mockResolvedValueOnce({ ok: true, data: FAKE_LOOKUP_DRUG_DATA });
