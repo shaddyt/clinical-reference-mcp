@@ -1,5 +1,34 @@
 # Releases
 
+## v0.2.0 — 2026-04-27
+
+The first feature release after launch. The hosted demo at clinical-reference.shaddyt.space is now actually interactive: visitors land on a single page, pick one of the six tools from a dropdown, enter a drug name (the page comes pre-loaded with `lookup_drug aspirin` so the first click works without typing), and see live results from openFDA / RxNorm / RxNav rendered in the browser. No install, no MCP client, no JSON-RPC required.
+
+### What's new
+
+- **Interactive demo at `GET /`.** Tool selector, input field, run button, and a rendered result with a clickable citation link, an inline "Show raw JSON" toggle, and a Copy button for the JSON envelope. The disclaimer remains in a prominent yellow callout above the result. Mobile-responsive; respects `prefers-color-scheme: dark`. Vanilla HTML / CSS / JavaScript served as a single inline string from the Worker — no framework, no external resources, no analytics, no client storage.
+- **New endpoint: `POST /api/tool/:name`.** Thin HTTP wrapper around the tool registry that takes JSON input and returns the same `{ ok: true, data } | { ok: false, error, disclaimer }` envelope the MCP CallTool response carries. Backs the in-browser demo. Marked with an `X-API-Note: demo-backend; not-part-of-mcp-spec` response header on every `/api/*` response so anyone discovering the route knows the MCP-compliant entry point remains `POST /mcp`. Unknown tool names return 404 with a structured `details.validTools` array. ([734bafd](https://github.com/shaddyt/clinical-reference-mcp/commit/734bafd))
+- **Refactor: shared tool registry in `src/server/tools/registry.ts`.** `TOOL_REGISTRY`, `TOOL_NAMES`, `isToolName`, and a transport-agnostic `dispatchTool(name, input)` now live in one module consumed by both the MCP server (`src/server/server.ts`) and the new HTTP route. A future third invocation surface plugs in without further refactor. ([2e83d96](https://github.com/shaddyt/clinical-reference-mcp/commit/2e83d96))
+- **No new runtime dependencies.** The page is vanilla HTML, CSS, and JavaScript served as a single string. Total payload ~20.4 KB (under a self-imposed 25 KB ceiling, locked in by a regression test).
+
+### What's not changed
+
+- **All 6 tools and their schemas are unchanged.** v0.1.x consumers can upgrade safely; tool names, input schemas, and response envelopes are byte-for-byte the same.
+- **The MCP transport (`POST /mcp`) and stdio transport are unchanged.** Both continue to use the same registry the demo backend dispatches through, so behavior cannot diverge between the two surfaces.
+- **The CLI is unchanged.** Same subcommands, same flags, same JSON envelopes.
+- **The npm package install path is unchanged.** `npx -y @shaddyt/clinical-reference-mcp` still works the same way. The `bin` entries are unchanged.
+- **The 96/91 coverage floor is held; the test count grew from 309 to 329** with the new endpoint and demo-page assertions.
+
+### Where this sits in the release history
+
+The v0.1.0 → v0.1.3 sequence shipped a working stack on launch weekend, then patched three downstream bugs surfaced by post-launch smoke tests against the live FDA / NIH endpoints (RxNav alias rows, RxCUI deduplication, `+`-encoded query params). v0.1.3 is the stable canonical release the v0.1.x line resolved to. v0.2.0 is the first release that adds new functionality on top of that stable base; it's a minor bump because the public contract surface (tool names, schemas, MCP transport, CLI) is unchanged.
+
+### Acknowledgments
+
+Same upstream sources as prior versions ([NOTICE](NOTICE)). The MCP specification and TypeScript SDK are maintained by Anthropic.
+
+---
+
 ## v0.1.3 — 2026-04-27
 
 A third post-launch patch on the same Sunday, completing the chain that began with v0.1.1. After v0.1.2 unblocked the resolver, `lookup_drug aspirin` reached its downstream RxNav calls and immediately failed with `UPSTREAM_ERROR` (HTTP 400) on the `related.json` fetch. The cause was a subtle URL-encoding bug that affected `lookup_drug` and `find_alternatives`. v0.1.3 fixes it.
