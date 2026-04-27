@@ -45,9 +45,11 @@ export async function fetchJson(
 ): Promise<HttpResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  let lastFailure: HttpFailure = networkFailure(
-    'Upstream call exhausted retries',
-  );
+  // Initial sentinel: only ever returned if every attempt produces a
+  // transient failure (overwritten below). networkFailure encodes the
+  // upstream label from the URL, so the eventual user-facing message
+  // names openFDA / RxNav, not raw infrastructure text.
+  let lastFailure: HttpFailure = networkFailure(url);
 
   for (let attempt = 0; attempt <= BACKOFFS_MS.length; attempt++) {
     if (attempt > 0) {
@@ -72,6 +74,38 @@ type Outcome =
   | { kind: 'terminal'; envelope: HttpFailure }
   | { kind: 'transient'; envelope: HttpFailure };
 
+// User-facing error messages must NEVER include the raw URL or HTTP
+// status. Healthcare AI engineers evaluating the tool see "DATA_NOT_FOUND
+// at api.fda.gov/drug/event.json?search=patient.drug.openfda.rxcui%3A..."
+// as plumbing leakage, not a clinical-domain message. The URL and status
+// move into error.details for engineers debugging; the message stays in
+// clinical-domain language.
+type UpstreamLabel = 'openFDA' | 'RxNav' | 'unknown';
+
+function upstreamLabel(url: string): UpstreamLabel {
+  // Defensive parse: a malformed URL string at this layer means a
+  // programmer error elsewhere; default to 'unknown' rather than throwing.
+  try {
+    const host = new URL(url).host;
+    if (host.endsWith('api.fda.gov')) return 'openFDA';
+    if (host.endsWith('rxnav.nlm.nih.gov')) return 'RxNav';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function upstreamDetails(
+  url: string,
+  status: number,
+): Record<string, unknown> {
+  return {
+    upstream: upstreamLabel(url),
+    upstreamUrl: url,
+    upstreamStatus: status,
+  };
+}
+
 async function attemptOnce(
   url: string,
   options: FetchJsonOptions | undefined,
@@ -95,17 +129,23 @@ async function attemptOnce(
     clearTimeout(timer);
     return {
       kind: 'transient',
-      envelope: networkFailure('Network error or timeout reaching upstream'),
+      envelope: networkFailure(url),
     };
   }
   clearTimeout(timer);
+
+  const upstream = upstreamLabel(url);
 
   if (resp.status === 404) {
     return {
       kind: 'terminal',
       envelope: {
         ok: false,
-        error: { code: 'DATA_NOT_FOUND', message: `Not found at ${url}` },
+        error: {
+          code: 'DATA_NOT_FOUND',
+          message: `No matching records found in ${upstream}`,
+          details: upstreamDetails(url, resp.status),
+        },
       },
     };
   }
@@ -117,8 +157,9 @@ async function attemptOnce(
         ok: false,
         error: {
           code: 'UPSTREAM_ERROR',
-          message: 'Upstream rate-limited the request (429)',
+          message: `Upstream service ${upstream} rate-limited the request`,
           retryable: true,
+          details: upstreamDetails(url, resp.status),
         },
       },
     };
@@ -131,8 +172,9 @@ async function attemptOnce(
         ok: false,
         error: {
           code: 'UPSTREAM_ERROR',
-          message: `Upstream rejected the request with ${resp.status}`,
+          message: `Upstream service ${upstream} rejected the request`,
           retryable: false,
+          details: upstreamDetails(url, resp.status),
         },
       },
     };
@@ -145,8 +187,9 @@ async function attemptOnce(
         ok: false,
         error: {
           code: 'UPSTREAM_ERROR',
-          message: `Upstream returned ${resp.status}`,
+          message: `Upstream service ${upstream} returned an error`,
           retryable: true,
+          details: upstreamDetails(url, resp.status),
         },
       },
     };
@@ -162,8 +205,9 @@ async function attemptOnce(
         ok: false,
         error: {
           code: 'UPSTREAM_ERROR',
-          message: 'Upstream returned malformed JSON',
+          message: `Upstream service ${upstream} returned malformed JSON`,
           retryable: false,
+          details: upstreamDetails(url, resp.status),
         },
       },
     };
@@ -175,10 +219,17 @@ async function attemptOnce(
   };
 }
 
-function networkFailure(message: string): HttpFailure {
+function networkFailure(url: string): HttpFailure {
+  const upstream = upstreamLabel(url);
   return {
     ok: false,
-    error: { code: 'UPSTREAM_ERROR', message, retryable: true },
+    error: {
+      code: 'UPSTREAM_ERROR',
+      message: `Could not reach upstream service ${upstream}`,
+      retryable: true,
+      // upstreamStatus omitted -- the request never produced one.
+      details: { upstream, upstreamUrl: url },
+    },
   };
 }
 
