@@ -290,3 +290,127 @@ describe('openFda.topAdverseEvents', () => {
     expect(fetchJsonMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('openFda.findLabelByDrug', () => {
+  beforeEach(() => {
+    openFdaCache.clear();
+    fetchJsonMock.mockReset();
+  });
+
+  it('returns the RxCUI hit when openfda.rxcui search succeeds', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({ results: [{ openfda: { spl_set_id: ['set-rx'] } }] }),
+    );
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '11289',
+      genericName: 'warfarin',
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]?.setId).toBe('set-rx');
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.searchParams.get('search')).toBe('openfda.rxcui:"11289"');
+  });
+
+  it('falls back to openfda.generic_name when the RxCUI search returns 0 hits', async () => {
+    // Regression for the demo bug: aspirin (RxCUI 1191) labels exist in
+    // openFDA but are not RxCUI-indexed. Without this fallback,
+    // get_drug_label aspirin would return DATA_NOT_FOUND.
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({
+        results: [
+          { openfda: { spl_set_id: ['set-aspirin-by-name'], generic_name: ['ASPIRIN'] } },
+        ],
+      }),
+    );
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '1191',
+      genericName: 'aspirin',
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]?.setId).toBe('set-aspirin-by-name');
+    expect(fetchJsonMock).toHaveBeenCalledTimes(2);
+    const fallbackUrl = new URL(fetchJsonMock.mock.calls[1]?.[0] ?? '');
+    expect(fallbackUrl.searchParams.get('search')).toBe('openfda.generic_name:"aspirin"');
+  });
+
+  it('returns empty data when both RxCUI and generic_name searches miss', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '99999',
+      genericName: 'zzznotadrug',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toEqual([]);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates an upstream error from the RxCUI search without attempting fallback', async () => {
+    fetchJsonMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'UPSTREAM_ERROR', message: 'fda 503', retryable: true },
+    });
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '1191',
+      genericName: 'aspirin',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('openFda.findAdverseEventsByDrug', () => {
+  beforeEach(() => {
+    openFdaCache.clear();
+    fetchJsonMock.mockReset();
+  });
+
+  it('returns the RxCUI hits when patient.drug.openfda.rxcui count succeeds', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({ results: [{ term: 'nausea', count: 42 }] }),
+    );
+
+    const result = await openFda.findAdverseEventsByDrug({
+      rxcui: '11289',
+      genericName: 'warfarin',
+      limit: 5,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]?.count).toBe(42);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.searchParams.get('search')).toBe('patient.drug.openfda.rxcui:"11289"');
+  });
+
+  it('falls back to patient.drug.openfda.generic_name when RxCUI count returns 0', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({ results: [{ term: 'nausea', count: 7 }] }),
+    );
+
+    const result = await openFda.findAdverseEventsByDrug({
+      rxcui: '1191',
+      genericName: 'aspirin',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]?.term).toBe('nausea');
+    const fallbackUrl = new URL(fetchJsonMock.mock.calls[1]?.[0] ?? '');
+    expect(fallbackUrl.searchParams.get('search')).toBe(
+      'patient.drug.openfda.generic_name:"aspirin"',
+    );
+  });
+});

@@ -13,6 +13,8 @@ vi.mock('../../../src/lib/openfda', () => ({
   openFda: {
     searchLabels: vi.fn(),
     topAdverseEvents: vi.fn(),
+    findLabelByDrug: vi.fn(),
+    findAdverseEventsByDrug: vi.fn(),
   },
 }));
 
@@ -26,7 +28,7 @@ import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../../src/lib/safety';
 import { LookupAdverseEventsOutputSchema } from '../../../src/lib/types';
 
 const normalizeMock = vi.mocked(normalizeDrugName);
-const eventsMock = vi.mocked(openFda.topAdverseEvents);
+const eventsMock = vi.mocked(openFda.findAdverseEventsByDrug);
 
 beforeEach(() => {
   normalizeMock.mockReset();
@@ -97,8 +99,8 @@ describe('lookup_adverse_events — input validation', () => {
     await lookupAdverseEventsHandler({ name: 'aspirin' });
 
     expect(eventsMock).toHaveBeenCalledWith({
-      field: 'patient.drug.openfda.rxcui',
-      value: '1191',
+      rxcui: '1191',
+      genericName: 'Aspirin',
       limit: 10,
     });
   });
@@ -231,8 +233,8 @@ describe('lookup_adverse_events — successful resolution', () => {
     });
     await lookupAdverseEventsHandler({ name: 'aspirin', limit: 25 });
     expect(eventsMock).toHaveBeenCalledWith({
-      field: 'patient.drug.openfda.rxcui',
-      value: '1191',
+      rxcui: '1191',
+      genericName: 'Aspirin',
       limit: 25,
     });
   });

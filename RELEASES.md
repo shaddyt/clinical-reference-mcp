@@ -11,13 +11,17 @@ The first feature release after launch. The hosted demo at clinical-reference.sh
 - **Refactor: shared tool registry in `src/server/tools/registry.ts`.** `TOOL_REGISTRY`, `TOOL_NAMES`, `isToolName`, and a transport-agnostic `dispatchTool(name, input)` now live in one module consumed by both the MCP server (`src/server/server.ts`) and the new HTTP route. A future third invocation surface plugs in without further refactor. ([2e83d96](https://github.com/shaddyt/clinical-reference-mcp/commit/2e83d96))
 - **No new runtime dependencies.** The page is vanilla HTML, CSS, and JavaScript served as a single string. Total payload ~20.4 KB (under a self-imposed 25 KB ceiling, locked in by a regression test).
 
+### Also fixed (surfaced by the new demo)
+
+- **`get_drug_label`, `check_interactions`, `lookup_adverse_events`, and `get_dosing_reference` now resolve OTC monograph drugs.** All four openFDA-dependent tools previously searched `openfda.rxcui` only, which works for prescription drugs but misses OTC labels (aspirin, ibuprofen, acetaminophen) whose openFDA entries don't carry the RxCUI field. New `findLabelByDrug` and `findAdverseEventsByDrug` helpers in `src/lib/openfda.ts` apply a RxCUI -> generic_name fallback per request. The interactive demo surfaced this bug on the second click — `get_drug_label aspirin` returned `DATA_NOT_FOUND` because the openFDA aspirin labels are name-indexed, not RxCUI-indexed. The fallback strategy is exercised by helper-level unit tests covering the hit / fallback / both-empty / upstream-error branches.
+
 ### What's not changed
 
 - **All 6 tools and their schemas are unchanged.** v0.1.x consumers can upgrade safely; tool names, input schemas, and response envelopes are byte-for-byte the same.
 - **The MCP transport (`POST /mcp`) and stdio transport are unchanged.** Both continue to use the same registry the demo backend dispatches through, so behavior cannot diverge between the two surfaces.
 - **The CLI is unchanged.** Same subcommands, same flags, same JSON envelopes.
 - **The npm package install path is unchanged.** `npx -y @shaddyt/clinical-reference-mcp` still works the same way. The `bin` entries are unchanged.
-- **The 96/91 coverage floor is held; the test count grew from 309 to 329** with the new endpoint and demo-page assertions.
+- **The 96/91 coverage floor is held; the test count grew from 309 to 335** with the new endpoint, demo-page assertions, and openFDA fallback helper tests.
 
 ### Where this sits in the release history
 

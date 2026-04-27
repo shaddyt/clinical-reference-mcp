@@ -53,9 +53,9 @@ export async function lookupAdverseEventsHandler(
 
   const { rxcui, name: resolvedName } = normalized;
 
-  const events = await openFda.topAdverseEvents({
-    field: 'patient.drug.openfda.rxcui',
-    value: rxcui,
+  const events = await openFda.findAdverseEventsByDrug({
+    rxcui,
+    genericName: resolvedName,
     limit,
   });
   if (!events.ok) return respondError(events.error);

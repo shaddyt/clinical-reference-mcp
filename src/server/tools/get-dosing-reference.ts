@@ -56,9 +56,9 @@ export async function getDosingReferenceHandler(
 
   const { rxcui, name: resolvedName } = normalized;
 
-  const labels = await openFda.searchLabels({
-    field: 'openfda.rxcui',
-    value: rxcui,
+  const labels = await openFda.findLabelByDrug({
+    rxcui,
+    genericName: resolvedName,
     limit: 1,
   });
   if (!labels.ok) return respondError(labels.error);
@@ -67,7 +67,7 @@ export async function getDosingReferenceHandler(
   if (!hit) {
     return respondError({
       code: 'DATA_NOT_FOUND',
-      message: `FDA label not found for RxCUI ${rxcui}`,
+      message: `FDA label not found for ${resolvedName} (RxCUI ${rxcui})`,
     });
   }
   if (hit.dosage === undefined) {

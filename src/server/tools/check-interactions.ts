@@ -98,14 +98,16 @@ export async function checkInteractionsHandler(
     });
   }
 
-  // All resolved. Fetch labels in parallel, then iterate to short-circuit on
-  // the first upstream error and build per-drug entries on the success path.
+  // All resolved. Fetch labels in parallel via findLabelByDrug so the
+  // RxCUI -> generic_name fallback applies per-drug — otherwise OTC
+  // monograph drugs in the input would yield no interaction text even
+  // when openFDA does have the label under the generic name.
   const labelPairs = await Promise.all(
     resolved.map(async (pair) => ({
       pair,
-      result: await openFda.searchLabels({
-        field: 'openfda.rxcui',
-        value: pair.rxcui,
+      result: await openFda.findLabelByDrug({
+        rxcui: pair.rxcui,
+        genericName: pair.name,
         limit: 1,
       }),
     })),

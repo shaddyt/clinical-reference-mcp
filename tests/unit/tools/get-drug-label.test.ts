@@ -13,6 +13,8 @@ vi.mock('../../../src/lib/openfda', () => ({
   openFda: {
     searchLabels: vi.fn(),
     topAdverseEvents: vi.fn(),
+    findLabelByDrug: vi.fn(),
+    findAdverseEventsByDrug: vi.fn(),
   },
 }));
 
@@ -27,11 +29,11 @@ import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../../src/lib/safety';
 import { GetDrugLabelOutputSchema } from '../../../src/lib/types';
 
 const normalizeMock = vi.mocked(normalizeDrugName);
-const searchLabelsMock = vi.mocked(openFda.searchLabels);
+const findLabelByDrugMock = vi.mocked(openFda.findLabelByDrug);
 
 beforeEach(() => {
   normalizeMock.mockReset();
-  searchLabelsMock.mockReset();
+  findLabelByDrugMock.mockReset();
 });
 
 function fullLabelHit(overrides: Partial<LabelHit> = {}): LabelHit {
@@ -131,7 +133,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('returns DATA_NOT_FOUND with rxcui when no labels match', async () => {
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [] });
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [] });
     const out = await getDrugLabelHandler({ name: 'aspirin' });
     expect(out.ok).toBe(false);
     if (!out.ok) {
@@ -141,7 +143,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('forwards openFDA upstream error', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: false,
       error: { code: 'UPSTREAM_ERROR', message: 'fda down', retryable: true },
     });
@@ -150,21 +152,24 @@ describe('get_drug_label — label resolution', () => {
     if (!out.ok) expect(out.error.code).toBe('UPSTREAM_ERROR');
   });
 
-  it('queries openFDA by openfda.rxcui with the resolved RxCUI', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+  it('dispatches to findLabelByDrug with the resolved RxCUI and generic name', async () => {
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
     await getDrugLabelHandler({ name: 'aspirin' });
-    expect(searchLabelsMock).toHaveBeenCalledWith({
-      field: 'openfda.rxcui',
-      value: '1191',
+    // findLabelByDrug applies the RxCUI -> generic_name fallback internally
+    // so the tool stays declarative about what it wants ("the label for
+    // this drug") without owning the search-strategy details.
+    expect(findLabelByDrugMock).toHaveBeenCalledWith({
+      rxcui: '1191',
+      genericName: 'Aspirin',
       limit: 1,
     });
   });
 
   it('returns all six sections when sections is omitted', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -184,7 +189,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('returns only requested sections when sections is provided', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -200,7 +205,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('treats empty sections array as no filter', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -213,7 +218,7 @@ describe('get_drug_label — label resolution', () => {
     const hit = fullLabelHit();
     delete hit.warnings;
     delete hit.contraindications;
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [hit],
     });
@@ -228,7 +233,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('silently skips unknown section names from input', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -244,7 +249,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('citation uses setId when available', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit({ setId: 'set-xyz' })],
     });
@@ -258,14 +263,14 @@ describe('get_drug_label — label resolution', () => {
   it('citation falls back to rxcui when setId is missing', async () => {
     const hit = fullLabelHit();
     delete hit.setId;
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [hit] });
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [hit] });
     const out = await getDrugLabelHandler({ name: 'aspirin' });
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.data.citation.url).toContain('set_id:1191');
   });
 
   it('embeds the canonical disclaimer', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -275,7 +280,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('uses the resolved name (not the raw input) as drugName', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });
@@ -285,7 +290,7 @@ describe('get_drug_label — label resolution', () => {
   });
 
   it('success payload conforms to GetDrugLabelOutputSchema', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [fullLabelHit()],
     });

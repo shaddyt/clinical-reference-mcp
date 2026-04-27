@@ -98,10 +98,33 @@ export interface AdverseEventCount {
   count: number;
 }
 
+export interface FindLabelByDrugOptions {
+  rxcui: string;
+  genericName: string;
+  limit?: number;
+}
+
+export interface FindAdverseEventsByDrugOptions {
+  rxcui: string;
+  genericName: string;
+  countField?: string;
+  limit?: number;
+}
+
 export interface OpenFdaClient {
   searchLabels(opts: SearchLabelsOptions): Promise<Result<LabelHit[]>>;
   topAdverseEvents(
     opts: TopAdverseEventsOptions,
+  ): Promise<Result<AdverseEventCount[]>>;
+  // Higher-level "find a label / events for this drug" with fallback.
+  // openFDA's `openfda.rxcui` field is populated reliably for prescription
+  // drugs but inconsistently for OTC monograph drugs (aspirin, ibuprofen,
+  // acetaminophen, etc.) — those labels exist in the dataset but are only
+  // discoverable via name fields. Try RxCUI first (most precise), fall
+  // back to generic_name when the RxCUI search returns zero hits.
+  findLabelByDrug(opts: FindLabelByDrugOptions): Promise<Result<LabelHit[]>>;
+  findAdverseEventsByDrug(
+    opts: FindAdverseEventsByDrugOptions,
   ): Promise<Result<AdverseEventCount[]>>;
 }
 
@@ -262,6 +285,51 @@ class DefaultOpenFdaClient implements OpenFdaClient {
     };
     openFdaCache.set(cacheKey, result);
     return result;
+  }
+
+  async findLabelByDrug(
+    opts: FindLabelByDrugOptions,
+  ): Promise<Result<LabelHit[]>> {
+    const byRxcui = await this.searchLabels({
+      field: 'openfda.rxcui',
+      value: opts.rxcui,
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
+    if (!byRxcui.ok) return byRxcui;
+    if (byRxcui.data.length > 0) return byRxcui;
+
+    // RxCUI search came back empty — common for OTC monograph drugs whose
+    // labels exist in openFDA but are not RxCUI-indexed. Fall through to
+    // generic name. The genericName comes from the RxNorm normalizer, so
+    // it is the canonical generic form (e.g. "aspirin", not "ASA").
+    return this.searchLabels({
+      field: 'openfda.generic_name',
+      value: opts.genericName,
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
+  }
+
+  async findAdverseEventsByDrug(
+    opts: FindAdverseEventsByDrugOptions,
+  ): Promise<Result<AdverseEventCount[]>> {
+    const byRxcui = await this.topAdverseEvents({
+      field: 'patient.drug.openfda.rxcui',
+      value: opts.rxcui,
+      ...(opts.countField !== undefined ? { countField: opts.countField } : {}),
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
+    if (!byRxcui.ok) return byRxcui;
+    if (byRxcui.data.length > 0) return byRxcui;
+
+    // FAERS reports for OTC drugs are filed under generic / brand names
+    // more often than RxCUIs; mirror the label-search fallback so
+    // 'lookup_adverse_events aspirin' returns useful data.
+    return this.topAdverseEvents({
+      field: 'patient.drug.openfda.generic_name',
+      value: opts.genericName,
+      ...(opts.countField !== undefined ? { countField: opts.countField } : {}),
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
   }
 }
 

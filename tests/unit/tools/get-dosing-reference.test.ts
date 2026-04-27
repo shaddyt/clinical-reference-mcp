@@ -13,6 +13,8 @@ vi.mock('../../../src/lib/openfda', () => ({
   openFda: {
     searchLabels: vi.fn(),
     topAdverseEvents: vi.fn(),
+    findLabelByDrug: vi.fn(),
+    findAdverseEventsByDrug: vi.fn(),
   },
 }));
 
@@ -27,11 +29,11 @@ import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../../src/lib/safety';
 import { GetDosingReferenceOutputSchema } from '../../../src/lib/types';
 
 const normalizeMock = vi.mocked(normalizeDrugName);
-const searchLabelsMock = vi.mocked(openFda.searchLabels);
+const findLabelByDrugMock = vi.mocked(openFda.findLabelByDrug);
 
 beforeEach(() => {
   normalizeMock.mockReset();
-  searchLabelsMock.mockReset();
+  findLabelByDrugMock.mockReset();
 });
 
 function labelHit(overrides: Partial<LabelHit> = {}): LabelHit {
@@ -119,7 +121,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('forwards openFDA upstream error', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: false,
       error: { code: 'UPSTREAM_ERROR', message: 'fda down', retryable: true },
     });
@@ -129,7 +131,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('returns DATA_NOT_FOUND when no FDA label exists', async () => {
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [] });
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [] });
     const out = await getDosingReferenceHandler({ name: 'aspirin' });
     expect(out.ok).toBe(false);
     if (!out.ok) {
@@ -141,7 +143,7 @@ describe('get_dosing_reference — label resolution', () => {
   it('returns DATA_NOT_FOUND when label has no dosage section', async () => {
     const hit = labelHit();
     delete hit.dosage;
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [hit] });
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [hit] });
 
     const out = await getDosingReferenceHandler({ name: 'aspirin' });
     expect(out.ok).toBe(false);
@@ -152,7 +154,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('returns the dosage text verbatim as a single entry', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ dosage: 'Adults: 325 mg every 4 hours as needed.' })],
     });
@@ -168,7 +170,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('does not populate population or route fields (these are not parsed)', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [
         labelHit({
@@ -187,7 +189,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('citation uses setId when present', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ setId: 'set-aspirin' })],
     });
@@ -200,7 +202,7 @@ describe('get_dosing_reference — label resolution', () => {
   it('citation falls back to rxcui when setId is missing', async () => {
     const hit = labelHit();
     delete hit.setId;
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [hit] });
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [hit] });
 
     const out = await getDosingReferenceHandler({ name: 'aspirin' });
     expect(out.ok).toBe(true);
@@ -208,7 +210,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('embeds the canonical disclaimer', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit()],
     });
@@ -218,7 +220,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('scope note disclaims patient-specific adjustment and prescribing', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit()],
     });
@@ -231,7 +233,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('uses the resolved name as drugName', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit()],
     });
@@ -241,7 +243,7 @@ describe('get_dosing_reference — label resolution', () => {
   });
 
   it('success payload conforms to GetDosingReferenceOutputSchema', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit()],
     });

@@ -13,6 +13,8 @@ vi.mock('../../../src/lib/openfda', () => ({
   openFda: {
     searchLabels: vi.fn(),
     topAdverseEvents: vi.fn(),
+    findLabelByDrug: vi.fn(),
+    findAdverseEventsByDrug: vi.fn(),
   },
 }));
 
@@ -28,11 +30,11 @@ import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../../src/lib/safety';
 import { CheckInteractionsOutputSchema } from '../../../src/lib/types';
 
 const normalizeMock = vi.mocked(normalizeDrugName);
-const searchLabelsMock = vi.mocked(openFda.searchLabels);
+const findLabelByDrugMock = vi.mocked(openFda.findLabelByDrug);
 
 beforeEach(() => {
   normalizeMock.mockReset();
-  searchLabelsMock.mockReset();
+  findLabelByDrugMock.mockReset();
 });
 
 function resolved(rxcui: string, name: string): NormalizeResult {
@@ -171,8 +173,8 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('forwards openFDA upstream errors verbatim', async () => {
-    searchLabelsMock.mockResolvedValueOnce({ ok: true, data: [labelHit()] });
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({ ok: true, data: [labelHit()] });
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: false,
       error: { code: 'UPSTREAM_ERROR', message: 'fda down', retryable: true },
     });
@@ -185,11 +187,11 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('uses drug_interactions section when present', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ drugInteractions: 'Increases bleeding with warfarin.' })],
     });
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ drugInteractions: 'Aspirin amplifies anticoagulation.' })],
     });
@@ -209,7 +211,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('falls back to warnings section when drug_interactions is absent', async () => {
-    searchLabelsMock.mockResolvedValue({
+    findLabelByDrugMock.mockResolvedValue({
       ok: true,
       data: [labelHit({ warnings: 'Bleeding risk noted.' })],
     });
@@ -224,7 +226,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('interactionsText is null when neither section nor label exists', async () => {
-    searchLabelsMock.mockResolvedValue({ ok: true, data: [] });
+    findLabelByDrugMock.mockResolvedValue({ ok: true, data: [] });
 
     const out = await checkInteractionsHandler({
       drugs: ['aspirin', 'warfarin'],
@@ -237,7 +239,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('interactionsText is null when label has neither drug_interactions nor warnings', async () => {
-    searchLabelsMock.mockResolvedValue({
+    findLabelByDrugMock.mockResolvedValue({
       ok: true,
       data: [labelHit({ indications: 'For pain.' })],
     });
@@ -250,11 +252,11 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('each entry carries its own per-drug citation (not shared)', async () => {
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ setId: 'set-aspirin' })],
     });
-    searchLabelsMock.mockResolvedValueOnce({
+    findLabelByDrugMock.mockResolvedValueOnce({
       ok: true,
       data: [labelHit({ setId: 'set-warfarin' })],
     });
@@ -272,7 +274,7 @@ describe('check_interactions — successful resolution', () => {
   it('citation falls back to rxcui when label has no setId', async () => {
     const hit = labelHit();
     delete hit.setId;
-    searchLabelsMock.mockResolvedValue({ ok: true, data: [hit] });
+    findLabelByDrugMock.mockResolvedValue({ ok: true, data: [hit] });
 
     const out = await checkInteractionsHandler({
       drugs: ['aspirin', 'warfarin'],
@@ -285,7 +287,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('preserves caller-input order in the entries array', async () => {
-    searchLabelsMock.mockResolvedValue({ ok: true, data: [labelHit()] });
+    findLabelByDrugMock.mockResolvedValue({ ok: true, data: [labelHit()] });
 
     const out = await checkInteractionsHandler({
       drugs: ['warfarin', 'aspirin'],
@@ -298,7 +300,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('embeds the canonical disclaimer and the scope note', async () => {
-    searchLabelsMock.mockResolvedValue({ ok: true, data: [labelHit()] });
+    findLabelByDrugMock.mockResolvedValue({ ok: true, data: [labelHit()] });
 
     const out = await checkInteractionsHandler({
       drugs: ['aspirin', 'warfarin'],
@@ -312,7 +314,7 @@ describe('check_interactions — successful resolution', () => {
   });
 
   it('success payload conforms to CheckInteractionsOutputSchema', async () => {
-    searchLabelsMock.mockResolvedValue({
+    findLabelByDrugMock.mockResolvedValue({
       ok: true,
       data: [labelHit({ drugInteractions: 'X interacts with Y.' })],
     });
