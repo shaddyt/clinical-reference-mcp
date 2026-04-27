@@ -159,6 +159,60 @@ function buildEventsUrl(opts: TopAdverseEventsOptions): string {
   return `${BASE}/drug/event.json?${params.toString()}`;
 }
 
+// Lucene OR-clause covering both the RxCUI-indexed and generic_name-indexed
+// records for the same drug. Why an OR (not sequential fallback): openFDA
+// stores RxCUIs at the clinical-product level (SCD/SBD), e.g. warfarin's
+// labels carry RxCUIs like 855288, NOT the IN-level 11289 our RxNorm
+// normalizer returns. Many FAERS reports also predate RxCUI annotation.
+// A single OR-search returns the union of both indices in one round trip;
+// a sequential fallback would either short-circuit on the first index's
+// 404 (openFDA returns 404 for zero hits) or undercount when one index is
+// partially populated. Lowercasing the generic name is the safest default
+// for case-folded indexing.
+//
+// Encoding note: the literal space between clauses is intentional --
+// URLSearchParams encodes it to '+' on the wire, producing ' OR '. A
+// literal '+' here would encode to '%2B' and break the openFDA query
+// parser (the same v0.1.3 RxNav '+' bug class).
+function buildOrClause(
+  rxcuiField: string,
+  genericNameField: string,
+  rxcui: string,
+  genericName: string,
+): string {
+  const r = escapeLuceneValue(rxcui);
+  const g = escapeLuceneValue(genericName.toLowerCase());
+  return `${rxcuiField}:"${r}" OR ${genericNameField}:"${g}"`;
+}
+
+function buildLabelsOrUrl(opts: FindLabelByDrugOptions): string {
+  const params = new URLSearchParams();
+  params.set(
+    'search',
+    buildOrClause('openfda.rxcui', 'openfda.generic_name', opts.rxcui, opts.genericName),
+  );
+  params.set('limit', String(clampLimit(opts.limit)));
+  return `${BASE}/drug/label.json?${params.toString()}`;
+}
+
+function buildEventsOrUrl(opts: FindAdverseEventsByDrugOptions): string {
+  const params = new URLSearchParams();
+  params.set(
+    'search',
+    buildOrClause(
+      'patient.drug.openfda.rxcui',
+      'patient.drug.openfda.generic_name',
+      opts.rxcui,
+      opts.genericName,
+    ),
+  );
+  params.set('count', opts.countField ?? DEFAULT_REACTION_FIELD);
+  if (opts.limit !== undefined) {
+    params.set('limit', String(clampLimit(opts.limit)));
+  }
+  return `${BASE}/drug/event.json?${params.toString()}`;
+}
+
 // Stable cache key: sort query params so equivalent requests hit the same
 // entry regardless of the order callers happened to construct them.
 function canonicalize(url: string): string {
@@ -228,108 +282,81 @@ function upstreamShapeError(detail: string): Result<never> {
   };
 }
 
-class DefaultOpenFdaClient implements OpenFdaClient {
-  async searchLabels(
-    opts: SearchLabelsOptions,
-  ): Promise<Result<LabelHit[]>> {
-    const url = buildLabelsUrl(opts);
-    const cacheKey = canonicalize(url);
+// Shared cache+rate+fetch+parse chain for label requests. Both the
+// single-field searchLabels and the OR-query findLabelByDrug funnel through
+// here so the cache key, rate limiter, and shape validation stay uniform.
+async function executeLabelFetch(url: string): Promise<Result<LabelHit[]>> {
+  const cacheKey = canonicalize(url);
+  const cached = openFdaCache.get(cacheKey) as Result<LabelHit[]> | undefined;
+  if (cached !== undefined) return cached;
 
-    const cached = openFdaCache.get(cacheKey) as
-      | Result<LabelHit[]>
-      | undefined;
-    if (cached !== undefined) return cached;
+  await openFdaLimiter.acquire();
+  const http = await fetchJson(url);
+  if (!http.ok) return { ok: false, error: http.error };
 
-    await openFdaLimiter.acquire();
-    const http = await fetchJson(url);
-    if (!http.ok) return { ok: false, error: http.error };
-
-    const parsed = LabelResponseSchema.safeParse(http.data);
-    if (!parsed.success) {
-      return upstreamShapeError(
-        'OpenFDA label response did not match expected shape',
-      );
-    }
-
-    const hits = parsed.data.results.map(normalizeLabel);
-    const result: Result<LabelHit[]> = { ok: true, data: hits };
-    openFdaCache.set(cacheKey, result);
-    return result;
+  const parsed = LabelResponseSchema.safeParse(http.data);
+  if (!parsed.success) {
+    return upstreamShapeError(
+      'OpenFDA label response did not match expected shape',
+    );
   }
 
-  async topAdverseEvents(
+  const hits = parsed.data.results.map(normalizeLabel);
+  const result: Result<LabelHit[]> = { ok: true, data: hits };
+  openFdaCache.set(cacheKey, result);
+  return result;
+}
+
+async function executeEventsFetch(
+  url: string,
+): Promise<Result<AdverseEventCount[]>> {
+  const cacheKey = canonicalize(url);
+  const cached = openFdaCache.get(cacheKey) as
+    | Result<AdverseEventCount[]>
+    | undefined;
+  if (cached !== undefined) return cached;
+
+  await openFdaLimiter.acquire();
+  const http = await fetchJson(url);
+  if (!http.ok) return { ok: false, error: http.error };
+
+  const parsed = EventResponseSchema.safeParse(http.data);
+  if (!parsed.success) {
+    return upstreamShapeError(
+      'OpenFDA event response did not match expected shape',
+    );
+  }
+
+  const result: Result<AdverseEventCount[]> = {
+    ok: true,
+    data: parsed.data.results,
+  };
+  openFdaCache.set(cacheKey, result);
+  return result;
+}
+
+class DefaultOpenFdaClient implements OpenFdaClient {
+  searchLabels(opts: SearchLabelsOptions): Promise<Result<LabelHit[]>> {
+    return executeLabelFetch(buildLabelsUrl(opts));
+  }
+
+  topAdverseEvents(
     opts: TopAdverseEventsOptions,
   ): Promise<Result<AdverseEventCount[]>> {
-    const url = buildEventsUrl(opts);
-    const cacheKey = canonicalize(url);
-
-    const cached = openFdaCache.get(cacheKey) as
-      | Result<AdverseEventCount[]>
-      | undefined;
-    if (cached !== undefined) return cached;
-
-    await openFdaLimiter.acquire();
-    const http = await fetchJson(url);
-    if (!http.ok) return { ok: false, error: http.error };
-
-    const parsed = EventResponseSchema.safeParse(http.data);
-    if (!parsed.success) {
-      return upstreamShapeError(
-        'OpenFDA event response did not match expected shape',
-      );
-    }
-
-    const result: Result<AdverseEventCount[]> = {
-      ok: true,
-      data: parsed.data.results,
-    };
-    openFdaCache.set(cacheKey, result);
-    return result;
+    return executeEventsFetch(buildEventsUrl(opts));
   }
 
-  async findLabelByDrug(
-    opts: FindLabelByDrugOptions,
-  ): Promise<Result<LabelHit[]>> {
-    const byRxcui = await this.searchLabels({
-      field: 'openfda.rxcui',
-      value: opts.rxcui,
-      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
-    });
-    if (!byRxcui.ok) return byRxcui;
-    if (byRxcui.data.length > 0) return byRxcui;
-
-    // RxCUI search came back empty — common for OTC monograph drugs whose
-    // labels exist in openFDA but are not RxCUI-indexed. Fall through to
-    // generic name. The genericName comes from the RxNorm normalizer, so
-    // it is the canonical generic form (e.g. "aspirin", not "ASA").
-    return this.searchLabels({
-      field: 'openfda.generic_name',
-      value: opts.genericName,
-      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
-    });
+  findLabelByDrug(opts: FindLabelByDrugOptions): Promise<Result<LabelHit[]>> {
+    // Single OR-query: rxcui OR generic_name in one round trip. See
+    // buildOrClause for why this beats sequential fallback (openFDA's
+    // 404-as-zero-hits, missing IN-level RxCUIs in openfda.rxcui arrays).
+    return executeLabelFetch(buildLabelsOrUrl(opts));
   }
 
-  async findAdverseEventsByDrug(
+  findAdverseEventsByDrug(
     opts: FindAdverseEventsByDrugOptions,
   ): Promise<Result<AdverseEventCount[]>> {
-    const byRxcui = await this.topAdverseEvents({
-      field: 'patient.drug.openfda.rxcui',
-      value: opts.rxcui,
-      ...(opts.countField !== undefined ? { countField: opts.countField } : {}),
-      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
-    });
-    if (!byRxcui.ok) return byRxcui;
-    if (byRxcui.data.length > 0) return byRxcui;
-
-    // FAERS reports for OTC drugs are filed under generic / brand names
-    // more often than RxCUIs; mirror the label-search fallback so
-    // 'lookup_adverse_events aspirin' returns useful data.
-    return this.topAdverseEvents({
-      field: 'patient.drug.openfda.generic_name',
-      value: opts.genericName,
-      ...(opts.countField !== undefined ? { countField: opts.countField } : {}),
-      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
-    });
+    return executeEventsFetch(buildEventsOrUrl(opts));
   }
 }
 

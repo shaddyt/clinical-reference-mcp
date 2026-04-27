@@ -3,7 +3,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      // .wrangler/ holds generated bundles + temp dev artifacts produced
+      // by `pnpm wrangler dev --local`. Not source we maintain.
+      '.wrangler/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
