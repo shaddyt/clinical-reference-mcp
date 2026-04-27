@@ -12,7 +12,7 @@ An MCP (Model Context Protocol) server that gives AI agents and command-line cal
 
 ## Try it without installing
 
-A live HTTP MCP endpoint runs at **<https://clinical-reference.shaddyt.space>**. Visit the URL in a browser for a one-page connection guide, or point any MCP client that speaks Streamable HTTP at `https://clinical-reference.shaddyt.space/mcp`.
+**Hosted demo:** **<https://clinical-reference.shaddyt.space>** — pick a tool, enter a drug name, see live results from openFDA / RxNorm / RxNav. No install required. Or point any MCP client that speaks Streamable HTTP at `https://clinical-reference.shaddyt.space/mcp`.
 
 ## Safety & scope
 
