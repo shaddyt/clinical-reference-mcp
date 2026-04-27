@@ -1,5 +1,61 @@
 # Releases
 
+## v0.2.1 — 2026-04-27
+
+The first version of v0.2.x recommended for use. v0.2.0 shipped to npm with the
+interactive demo working but with critical bugs in four of the six tools that
+post-publish clinical-quality testing surfaced. v0.2.1 fixes those bugs and is
+the canonical first release of the v0.2 line.
+
+### Fixed since v0.2.0
+
+The bugs were all in the same module — `src/lib/openfda.ts` — and shared a root
+cause: the openFDA query construction queried by `rxcui` only, but the openFDA
+adverse-event and drug-label databases populate RxCUI annotations
+inconsistently. Many older records lack RxCUI entirely; for some drugs
+(warfarin, hydralazine, aspirin) the bare-RxCUI query returns zero matches even
+though thousands of records exist under generic-name lookup.
+
+The four affected tools — `get_drug_label`, `check_interactions`,
+`lookup_adverse_events`, and `get_dosing_reference` — returned `DATA_NOT_FOUND`
+for most common drugs in v0.2.0. v0.2.1 rebuilds the query as an OR over
+`rxcui` and lowercased `generic_name`, which captures records under both
+annotations in a single request. The two unaffected tools (`lookup_drug` and
+`find_alternatives`) use RxNav directly and were never affected.
+
+Additional fixes in this release:
+
+- **Sanitized error messages.** Previously, openFDA / RxNav errors leaked raw
+  query URLs into the user-facing `error.message`. URLs now live in
+  `error.details.upstreamUrl` for debugging; the message uses clinical-domain
+  language ("No matching records found in openFDA").
+- **FAERS limitations text.** `lookup_adverse_events` responses now include a
+  `limitations` field with the standard FAERS interpretation caveats (voluntary
+  reporting, no incidence rates, no causation establishment, reporting bias).
+  The interactive demo renders this in a yellow callout above the events list.
+  Surfacing FAERS counts without these caveats can mislead non-clinical AI
+  engineers consuming the data.
+- **Live-API integration test suite.** A new `tests/integration/live-api.test.ts`
+  hits the real openFDA and RxNav endpoints for ten common drugs across all
+  six tools. Gated behind `RUN_LIVE_TESTS=1` so default CI runs stay fast and
+  offline-capable. This is the test pattern that would have caught the v0.1.x
+  and v0.2.0 bugs before publish.
+
+### Where this sits in the release history
+
+v0.2.0 added the interactive demo at clinical-reference.shaddyt.space and the
+`POST /api/tool/:name` dispatch endpoint, but shipped with the openFDA query
+bug. v0.2.1 keeps every v0.2.0 feature and fixes the data-quality bugs.
+v0.1.x consumers can upgrade to v0.2.1 directly; the public contract surface
+is unchanged.
+
+### Acknowledgments
+
+Same upstream sources as prior versions ([NOTICE](NOTICE)). The MCP specification
+and TypeScript SDK are maintained by Anthropic.
+
+---
+
 ## v0.2.0 — 2026-04-27
 
 The first feature release after launch. The hosted demo at clinical-reference.shaddyt.space is now actually interactive: visitors land on a single page, pick one of the six tools from a dropdown, enter a drug name (the page comes pre-loaded with `lookup_drug aspirin` so the first click works without typing), and see live results from openFDA / RxNorm / RxNav rendered in the browser. No install, no MCP client, no JSON-RPC required.
