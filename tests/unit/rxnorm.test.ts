@@ -249,14 +249,18 @@ describe('rxNorm.getProperties', () => {
 // ---------- getRelated ----------
 
 describe('rxNorm.getRelated', () => {
-  it('joins requested term types with "+" in the tty query param', async () => {
+  it('joins requested term types with a literal "+" in the tty query param', async () => {
     fetchJsonMock.mockResolvedValueOnce(httpSuccess({ relatedGroup: { conceptGroup: [] } }));
 
     await rxNorm.getRelated('161', ['IN', 'BN']);
 
-    const u = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
-    expect(u.pathname).toBe('/REST/rxcui/161/related.json');
-    expect(u.searchParams.get('tty')).toBe('IN+BN');
+    // RxNav rejects `tty=IN%2BBN` with HTTP 400; it requires the `+` to
+    // reach the wire literally. Assert on the raw URL string (not just
+    // the URLSearchParams parse, which would mask %2B encoding) so this
+    // regression class can't recur.
+    const url = fetchJsonMock.mock.calls[0]?.[0] ?? '';
+    expect(url).toContain('/REST/rxcui/161/related.json?tty=IN+BN');
+    expect(url).not.toContain('%2B');
   });
 
   it('flattens conceptGroup → conceptProperties into RelatedConcept[]', async () => {
@@ -384,13 +388,16 @@ describe('rxNorm.getClassMembers', () => {
     expect(u.searchParams.get('ttys')).toBe('IN');
   });
 
-  it('joins multiple ttys with "+"', async () => {
+  it('joins multiple ttys with a literal "+"', async () => {
     fetchJsonMock.mockResolvedValueOnce(httpSuccess({ drugMemberGroup: { drugMember: [] } }));
 
     await rxNorm.getClassMembers('N02BE', ['IN', 'PIN']);
 
-    const u = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
-    expect(u.searchParams.get('ttys')).toBe('IN+PIN');
+    // Same RxNav %2B-rejection rule as getRelated. Assert on the raw
+    // URL string so URLSearchParams encoding can't sneak back in.
+    const url = fetchJsonMock.mock.calls[0]?.[0] ?? '';
+    expect(url).toContain('ttys=IN+PIN');
+    expect(url).not.toContain('%2B');
   });
 
   it('flattens drugMember into ClassMember[]', async () => {

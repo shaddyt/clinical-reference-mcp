@@ -169,9 +169,11 @@ function buildPropertiesUrl(rxcui: string): string {
 }
 
 function buildRelatedUrl(rxcui: string, relationships: RelatedTty[]): string {
-  const params = new URLSearchParams();
-  params.set('tty', relationships.join('+'));
-  return `${BASE}/rxcui/${encodeURIComponent(rxcui)}/related.json?${params.toString()}`;
+  // RxNav requires `+` as a literal list separator. URLSearchParams would
+  // percent-encode it to `%2B`, which RxNav rejects with 400. TTY values
+  // are ASCII alphanumeric so no encoding is needed; build the query
+  // string by concatenation.
+  return `${BASE}/rxcui/${encodeURIComponent(rxcui)}/related.json?tty=${relationships.join('+')}`;
 }
 
 function buildClassesUrl(rxcui: string): string {
@@ -185,8 +187,10 @@ function buildClassMembersUrl(classId: string, ttys: string[]): string {
   const params = new URLSearchParams();
   params.set('classId', classId);
   params.set('relaSource', RELA_SOURCE_ATC);
-  params.set('ttys', ttys.join('+'));
-  return `${BASE}/rxclass/classMembers.json?${params.toString()}`;
+  // RxNav requires `+` as a literal list separator for `ttys`. See the
+  // matching note in buildRelatedUrl. Append by concatenation so the `+`
+  // survives to the wire.
+  return `${BASE}/rxclass/classMembers.json?${params.toString()}&ttys=${ttys.join('+')}`;
 }
 
 // ---------- Helpers ----------
