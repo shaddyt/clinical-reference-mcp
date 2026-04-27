@@ -69,8 +69,9 @@ describe('buildHttpApp', () => {
     expect(response.headers.get('content-type')).toMatch(/text\/html/);
     const body = await response.text();
     expect(body).toContain('clinical-reference-mcp');
-    expect(body).toContain('POST /mcp');
-    expect(body).toContain('GET /health');
+    // Comprehensive structural assertions (demo dropdown, install snippets,
+    // tools reference, etc.) live in the dedicated 'GET / interactive demo
+    // page' suite below.
   });
 
   it('serves /health with the expected JSON shape', async () => {
