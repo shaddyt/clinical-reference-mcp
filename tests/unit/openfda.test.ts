@@ -291,7 +291,153 @@ describe('openFda.topAdverseEvents', () => {
   });
 });
 
-// findLabelByDrug + findAdverseEventsByDrug helper coverage lands in the
-// next commit (OR-query construction, lowercasing, URL encoding). The
-// previous sequential-fallback tests were removed in this commit because
-// the underlying implementation no longer makes two sequential calls.
+describe('openFda.findLabelByDrug (OR-query)', () => {
+  beforeEach(() => {
+    openFdaCache.clear();
+    fetchJsonMock.mockReset();
+  });
+
+  it('issues a single OR-query covering rxcui and generic_name', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({ results: [{ openfda: { spl_set_id: ['set-x'] } }] }),
+    );
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '11289',
+      genericName: 'Warfarin',
+      limit: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.pathname).toBe('/drug/label.json');
+    expect(url.searchParams.get('search')).toBe(
+      'openfda.rxcui:"11289" OR openfda.generic_name:"warfarin"',
+    );
+    expect(url.searchParams.get('limit')).toBe('1');
+  });
+
+  it('lowercases the generic name (case-folded indexing in openFDA)', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findLabelByDrug({
+      rxcui: '1191',
+      genericName: 'ASPIRIN',
+    });
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.searchParams.get('search')).toContain(
+      'openfda.generic_name:"aspirin"',
+    );
+  });
+
+  it('encodes the OR clause with + between clauses, never literal %2B', async () => {
+    // Regression for the v0.1.3 RxNav bug class: putting a literal '+' in
+    // the input would encode to '%2B' and break the openFDA query parser.
+    // Using a literal space (which URLSearchParams encodes to '+') keeps
+    // the wire form ' OR ' intact.
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findLabelByDrug({ rxcui: '11289', genericName: 'warfarin' });
+    const rawUrl = fetchJsonMock.mock.calls[0]?.[0] ?? '';
+    expect(rawUrl).toContain('+OR+');
+    expect(rawUrl).not.toContain('%2BOR%2B');
+  });
+
+  it('propagates a DATA_NOT_FOUND from openFDA (404) without retrying', async () => {
+    // openFDA returns 404 for "no matches"; the http chokepoint maps that
+    // to DATA_NOT_FOUND. With OR-query that error means neither index
+    // had hits and there is no fallback to attempt.
+    fetchJsonMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'DATA_NOT_FOUND', message: 'Not found at <url>' },
+    });
+
+    const result = await openFda.findLabelByDrug({
+      rxcui: '99999',
+      genericName: 'zzznotadrug',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('DATA_NOT_FOUND');
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('escapes Lucene-special chars in the rxcui and generic name', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findLabelByDrug({
+      rxcui: 'a"b',
+      genericName: 'name"with-quotes',
+    });
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    // Embedded quotes are backslash-escaped so they don't terminate the
+    // quoted phrase in openFDA's Lucene parser.
+    expect(url.searchParams.get('search')).toBe(
+      'openfda.rxcui:"a\\"b" OR openfda.generic_name:"name\\"with-quotes"',
+    );
+  });
+});
+
+describe('openFda.findAdverseEventsByDrug (OR-query)', () => {
+  beforeEach(() => {
+    openFdaCache.clear();
+    fetchJsonMock.mockReset();
+  });
+
+  it('issues a single OR-query against patient.drug.openfda.* fields', async () => {
+    fetchJsonMock.mockResolvedValueOnce(
+      httpSuccess({ results: [{ term: 'INR INCREASED', count: 10374 }] }),
+    );
+
+    const result = await openFda.findAdverseEventsByDrug({
+      rxcui: '11289',
+      genericName: 'Warfarin',
+      limit: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]?.count).toBe(10374);
+    expect(fetchJsonMock).toHaveBeenCalledTimes(1);
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.pathname).toBe('/drug/event.json');
+    expect(url.searchParams.get('search')).toBe(
+      'patient.drug.openfda.rxcui:"11289" OR patient.drug.openfda.generic_name:"warfarin"',
+    );
+    expect(url.searchParams.get('limit')).toBe('10');
+  });
+
+  it('uses the default reaction-term count field when none supplied', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findAdverseEventsByDrug({
+      rxcui: '11289',
+      genericName: 'warfarin',
+    });
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.searchParams.get('count')).toBe(
+      'patient.reaction.reactionmeddrapt.exact',
+    );
+  });
+
+  it('passes through a caller-supplied countField verbatim', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findAdverseEventsByDrug({
+      rxcui: '11289',
+      genericName: 'warfarin',
+      countField: 'patient.reaction.reactionoutcome',
+    });
+    const url = new URL(fetchJsonMock.mock.calls[0]?.[0] ?? '');
+    expect(url.searchParams.get('count')).toBe(
+      'patient.reaction.reactionoutcome',
+    );
+  });
+
+  it('lowercases the generic name and uses + between OR clauses on the wire', async () => {
+    fetchJsonMock.mockResolvedValueOnce(httpSuccess({ results: [] }));
+    await openFda.findAdverseEventsByDrug({
+      rxcui: '11289',
+      genericName: 'WARFARIN',
+    });
+    const rawUrl = fetchJsonMock.mock.calls[0]?.[0] ?? '';
+    expect(rawUrl).toContain('+OR+');
+    expect(rawUrl).not.toContain('%2BOR%2B');
+    expect(rawUrl).toContain('generic_name%3A%22warfarin%22');
+  });
+});
