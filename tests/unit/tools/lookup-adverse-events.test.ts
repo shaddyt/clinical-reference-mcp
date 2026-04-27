@@ -24,7 +24,11 @@ import {
 } from '../../../src/server/tools/lookup-adverse-events';
 import { normalizeDrugName } from '../../../src/lib/normalize';
 import { openFda } from '../../../src/lib/openfda';
-import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../../src/lib/safety';
+import {
+  DISCLAIMER,
+  FAERS_LIMITATIONS,
+  TOOL_DESCRIPTION_SUFFIX,
+} from '../../../src/lib/safety';
 import { LookupAdverseEventsOutputSchema } from '../../../src/lib/types';
 
 const normalizeMock = vi.mocked(normalizeDrugName);
@@ -224,6 +228,19 @@ describe('lookup_adverse_events — successful resolution', () => {
     const out = await lookupAdverseEventsHandler({ name: 'aspirin' });
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.data.disclaimer).toBe(DISCLAIMER);
+  });
+
+  it('embeds FAERS_LIMITATIONS verbatim in every successful response', async () => {
+    // The limitations field is a hard requirement of the schema, populated
+    // from the central constant in safety.ts so the safety framing cannot
+    // drift between callers (CLI, demo, MCP).
+    eventsMock.mockResolvedValueOnce({
+      ok: true,
+      data: [{ term: 'nausea', count: 1 }],
+    });
+    const out = await lookupAdverseEventsHandler({ name: 'aspirin' });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.data.limitations).toBe(FAERS_LIMITATIONS);
   });
 
   it('passes the caller-specified limit to openFDA', async () => {

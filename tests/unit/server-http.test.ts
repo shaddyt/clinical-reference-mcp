@@ -254,6 +254,21 @@ describe('GET / interactive demo page', () => {
     const body = await fetchLandingPage();
     expect(body.length).toBeLessThan(25 * 1024);
   });
+
+  it('ships the appendCallout helper and skips limitations/scopeNote in the body walker', async () => {
+    // Locks in the safety-rendering contract: the demo's renderResult
+    // surfaces a yellow callout for limitations / scopeNote ABOVE the
+    // event/interaction list, not buried in raw JSON. If a future edit
+    // drops the helper or the skip-keys, FAERS counts could render
+    // without their interpretation guardrails -- caught by these
+    // assertions.
+    const body = await fetchLandingPage();
+    expect(body).toContain('function appendCallout');
+    expect(body).toContain('appendCallout(data.limitations)');
+    expect(body).toContain('appendCallout(data.scopeNote)');
+    expect(body).toContain('limitations: true');
+    expect(body).toContain('scopeNote: true');
+  });
 });
 
 describe('POST /api/tool/:name (demo backend)', () => {

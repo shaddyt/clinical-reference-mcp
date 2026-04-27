@@ -434,9 +434,30 @@ footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--bord
       meta.appendChild(buildCitationLink(data.citation));
       els.resultArea.appendChild(meta);
     }
-    // Disclaimer + citation already surfaced (callout + meta line); skip in body.
-    renderObject(data, els.resultArea, { disclaimer: true, citation: true });
+    // Render any interpretation-guidance fields (FAERS limitations,
+    // check_interactions scopeNote, etc.) in a yellow callout above the
+    // body. Putting it above the data is a safety requirement: a viewer
+    // sees "FAERS does not establish causation" before reading "DEATH:
+    // 1339 reports", not after.
+    appendCallout(data.limitations);
+    appendCallout(data.scopeNote);
+    // Disclaimer + citation + interpretation fields already surfaced;
+    // skip them in the generic body walker so they don't repeat.
+    renderObject(data, els.resultArea, {
+      disclaimer: true,
+      citation: true,
+      limitations: true,
+      scopeNote: true,
+    });
     appendRawJson(envelope);
+  }
+
+  function appendCallout(text) {
+    if (!text || typeof text !== 'string') return;
+    var box = document.createElement('div');
+    box.className = 'disclaimer';
+    box.textContent = text;
+    els.resultArea.appendChild(box);
   }
 
   function buildCitationLink(citation) {

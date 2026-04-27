@@ -51,7 +51,7 @@ vi.mock('../../src/server/tools/get-dosing-reference', async () => {
 });
 
 import { buildProgram } from '../../src/cli/index';
-import { DISCLAIMER } from '../../src/lib/safety';
+import { DISCLAIMER, FAERS_LIMITATIONS } from '../../src/lib/safety';
 import { VERSION } from '../../src/lib/version';
 import { checkInteractionsHandler } from '../../src/server/tools/check-interactions';
 import { findAlternativesHandler } from '../../src/server/tools/find-alternatives';
@@ -282,6 +282,7 @@ describe('subcommand dispatch', () => {
         drugName: 'ibuprofen',
         totalReports: 0,
         events: [],
+        limitations: FAERS_LIMITATIONS,
         disclaimer: DISCLAIMER,
         citation: {
           source: 'openFda',
@@ -416,6 +417,7 @@ describe('text-mode formatter branches', () => {
           { term: 'nausea', count: 42 },
           { term: 'headache', count: 17 },
         ],
+        limitations: FAERS_LIMITATIONS,
         disclaimer: DISCLAIMER,
         citation: {
           source: 'openFda',
@@ -427,6 +429,11 @@ describe('text-mode formatter branches', () => {
     const run = await runCli(['lookup-adverse-events', 'ibuprofen']);
     expect(run.code).toBe(0);
     expect(run.stdout).toContain('nausea');
+    // Limitations callout must precede the events list (safety req).
+    expect(run.stdout.indexOf('Limitations:')).toBeGreaterThanOrEqual(0);
+    expect(run.stdout.indexOf('Limitations:')).toBeLessThan(
+      run.stdout.indexOf('nausea'),
+    );
     expect(run.stdout).toContain('headache');
     expect(run.stdout).toContain('totalReports:');
   });

@@ -81,9 +81,33 @@ function formatSuccess(
   const lines: string[] = [];
   const citation = data['citation'];
   const disclaimer = data['disclaimer'];
+  const limitations = data['limitations'];
+  const scopeNote = data['scopeNote'];
+
+  // Interpretation guardrails (FAERS limitations, scopeNote) print BEFORE
+  // the data so the reader sees the caveat in front of the numbers, not
+  // after. Bracketed by separator lines for visual prominence -- equivalent
+  // to the demo's yellow callout above the events list.
+  if (typeof limitations === 'string' && limitations.length > 0) {
+    lines.push(paint(c.bold, 'Limitations:'));
+    lines.push(limitations);
+    lines.push('');
+  }
+  if (typeof scopeNote === 'string' && scopeNote.length > 0) {
+    lines.push(paint(c.bold, 'Scope note:'));
+    lines.push(scopeNote);
+    lines.push('');
+  }
 
   for (const [key, value] of Object.entries(data)) {
-    if (key === 'citation' || key === 'disclaimer') continue;
+    if (
+      key === 'citation' ||
+      key === 'disclaimer' ||
+      key === 'limitations' ||
+      key === 'scopeNote'
+    ) {
+      continue;
+    }
     if (isPrimitive(value)) {
       lines.push(`${formatLabel(key)} ${String(value)}`);
     } else if (isStringArray(value)) {

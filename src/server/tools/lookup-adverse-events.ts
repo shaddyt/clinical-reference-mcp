@@ -8,7 +8,11 @@ import { normalizeDrugName } from '../../lib/normalize';
 import { openFda } from '../../lib/openfda';
 import { respond, respondError } from '../../lib/respond';
 import type { ToolResponse } from '../../lib/respond';
-import { DISCLAIMER, TOOL_DESCRIPTION_SUFFIX } from '../../lib/safety';
+import {
+  DISCLAIMER,
+  FAERS_LIMITATIONS,
+  TOOL_DESCRIPTION_SUFFIX,
+} from '../../lib/safety';
 import {
   LookupAdverseEventsInputSchema,
   type LookupAdverseEventsOutput,
@@ -84,6 +88,7 @@ export async function lookupAdverseEventsHandler(
     rxcui,
     totalReports,
     events: sorted,
+    limitations: FAERS_LIMITATIONS,
     disclaimer: DISCLAIMER,
     citation: openFdaAdverseEventCitation(rxcui),
   });

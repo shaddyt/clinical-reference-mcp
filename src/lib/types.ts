@@ -149,6 +149,11 @@ export const LookupAdverseEventsOutputSchema = z.object({
   rxcui: z.string().optional(),
   totalReports: z.number().int().nonnegative(),
   events: z.array(AdverseEventEntrySchema),
+  // FAERS-specific interpretation guardrails (no incidence rates, no
+  // causation, voluntary reporting bias). Required so every successful
+  // response carries the caveats next to the count data they apply to;
+  // the demo and CLI render this prominently above the events list.
+  limitations: z.string(),
   disclaimer: z.string(),
   citation: CitationSchema,
 });
