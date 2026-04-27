@@ -180,7 +180,9 @@ describe('GET / interactive demo page', () => {
   it('includes the package name in <title> and as a heading', async () => {
     const body = await fetchLandingPage();
     expect(body).toMatch(/<title>[^<]*clinical-reference-mcp[^<]*<\/title>/);
-    expect(body).toMatch(/<h1>clinical-reference-mcp<\/h1>/);
+    // Allow attributes on the h1 so adding e.g. a class for styling later
+    // does not break this assertion for cosmetic reasons.
+    expect(body).toMatch(/<h1[^>]*>clinical-reference-mcp<\/h1>/);
   });
 
   it('renders the version from src/lib/version.ts in both header and footer', async () => {

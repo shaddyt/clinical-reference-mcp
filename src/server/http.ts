@@ -642,6 +642,17 @@ export function buildHttpApp(): Hono {
   // Not part of the MCP spec; the X-API-Note header announces that on every
   // response. Reuses the same handler registry as /mcp, so behavior never
   // diverges between the two surfaces.
+  //
+  // HTTP status codes here are deliberately layered:
+  //   200 -- successful dispatch OR tool-level domain error (matches /mcp's
+  //          envelope semantics; the response body's `ok` field discriminates)
+  //   400 -- request body could not be parsed as JSON
+  //   404 -- tool name not in the registry
+  // Domain errors keep envelope semantics; routing/parsing errors get HTTP
+  // semantics. The two layers serve different consumers: the envelope's `ok`
+  // field is for the application logic that needs to handle DATA_NOT_FOUND
+  // vs. UPSTREAM_ERROR vs. AMBIGUOUS_QUERY; the HTTP status is for routing
+  // middleware, monitoring, and CDN-level retry behavior.
   app.post('/api/tool/:name', async (c) => {
     const name = c.req.param('name');
 
