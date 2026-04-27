@@ -291,3 +291,165 @@ describe('fetchJson — malformed JSON', () => {
     if (!result.ok) expect(result.error.code).toBe('UPSTREAM_ERROR');
   });
 });
+
+describe('fetchJson — error message sanitization', () => {
+  // The user-facing `error.message` must NEVER include the raw URL or HTTP
+  // status. The full URL, status, and upstream label live in `error.details`
+  // for engineers debugging. The two layers serve different audiences.
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const FDA_URL = 'https://api.fda.gov/drug/event.json?search=foo';
+  const RXNAV_URL = 'https://rxnav.nlm.nih.gov/REST/rxcui.json?name=aspirin';
+  const UNKNOWN_URL = 'https://example.com/something';
+
+  function detailsOf(err: {
+    details?: Record<string, unknown> | undefined;
+  }): Record<string, unknown> {
+    // ?? {} narrows to a definite Record so `'foo' in d` and indexing
+    // both work without further guards.
+    return err.details ?? {};
+  }
+
+  it('404 from openFDA reads "No matching records found in openFDA"; URL in details', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(404, { error: 'not found' }));
+
+    const result = await fetchJson(FDA_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('DATA_NOT_FOUND');
+      expect(result.error.message).toBe('No matching records found in openFDA');
+      // Sanitization is the whole point: the URL must not leak into the
+      // user-visible message.
+      expect(result.error.message).not.toContain('http');
+      expect(result.error.message).not.toContain('api.fda.gov');
+      expect(result.error.message).not.toContain('%');
+      const d = detailsOf(result.error);
+      expect(d.upstream).toBe('openFDA');
+      expect(d.upstreamUrl).toBe(FDA_URL);
+      expect(d.upstreamStatus).toBe(404);
+    }
+  });
+
+  it('404 from RxNav labels the upstream RxNav', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(404, {}));
+
+    const result = await fetchJson(RXNAV_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('No matching records found in RxNav');
+      expect(detailsOf(result.error).upstream).toBe('RxNav');
+    }
+  });
+
+  it('unknown host falls back to "unknown" upstream label', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(404, {}));
+
+    const result = await fetchJson(UNKNOWN_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('No matching records found in unknown');
+      expect(detailsOf(result.error).upstream).toBe('unknown');
+    }
+  });
+
+  it('429 from openFDA reads "rate-limited" with retryable:true', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(429, {}));
+
+    const result = await fetchJson(FDA_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UPSTREAM_ERROR');
+      expect(result.error.message).toBe(
+        'Upstream service openFDA rate-limited the request',
+      );
+      expect(result.error.retryable).toBe(true);
+      expect(detailsOf(result.error).upstreamStatus).toBe(429);
+    }
+  });
+
+  it('400 reads "rejected the request" with no status leakage', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(400, {}));
+
+    const result = await fetchJson(FDA_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe(
+        'Upstream service openFDA rejected the request',
+      );
+      expect(result.error.message).not.toContain('400');
+      expect(detailsOf(result.error).upstreamStatus).toBe(400);
+    }
+  });
+
+  it('5xx after retries exhausted reads "returned an error"; status in details', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(500, {}));
+
+    const promise = fetchJson(FDA_URL);
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe(
+        'Upstream service openFDA returned an error',
+      );
+      expect(result.error.message).not.toContain('500');
+      expect(result.error.retryable).toBe(true);
+      expect(detailsOf(result.error).upstreamStatus).toBe(500);
+    }
+  });
+
+  it('malformed JSON reads "returned malformed JSON"; URL in details', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('not-json{{', { status: 200 }),
+    );
+
+    const result = await fetchJson(FDA_URL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe(
+        'Upstream service openFDA returned malformed JSON',
+      );
+      expect(detailsOf(result.error).upstreamUrl).toBe(FDA_URL);
+    }
+  });
+
+  it('network failure reads "Could not reach"; no upstreamStatus in details', async () => {
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const promise = fetchJson(FDA_URL);
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe(
+        'Could not reach upstream service openFDA',
+      );
+      expect(result.error.retryable).toBe(true);
+      const d = detailsOf(result.error);
+      expect(d.upstream).toBe('openFDA');
+      expect(d.upstreamUrl).toBe(FDA_URL);
+      // Network failures never produced a status; the field must be absent
+      // (not set to undefined) so JSON serialization is clean.
+      expect('upstreamStatus' in d).toBe(false);
+    }
+  });
+});
