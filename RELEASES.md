@@ -11,9 +11,25 @@ The first feature release after launch. The hosted demo at clinical-reference.sh
 - **Refactor: shared tool registry in `src/server/tools/registry.ts`.** `TOOL_REGISTRY`, `TOOL_NAMES`, `isToolName`, and a transport-agnostic `dispatchTool(name, input)` now live in one module consumed by both the MCP server (`src/server/server.ts`) and the new HTTP route. A future third invocation surface plugs in without further refactor. ([2e83d96](https://github.com/shaddyt/clinical-reference-mcp/commit/2e83d96))
 - **No new runtime dependencies.** The page is vanilla HTML, CSS, and JavaScript served as a single string. Total payload ~20.4 KB (under a self-imposed 25 KB ceiling, locked in by a regression test).
 
-### Also fixed (surfaced by the new demo)
+### Pre-release fixes (rolled into v0.2.0)
 
-- **`get_drug_label`, `check_interactions`, `lookup_adverse_events`, and `get_dosing_reference` now resolve OTC monograph drugs.** All four openFDA-dependent tools previously searched `openfda.rxcui` only, which works for prescription drugs but misses OTC labels (aspirin, ibuprofen, acetaminophen) whose openFDA entries don't carry the RxCUI field. New `findLabelByDrug` and `findAdverseEventsByDrug` helpers in `src/lib/openfda.ts` apply a RxCUI -> generic_name fallback per request. The interactive demo surfaced this bug on the second click — `get_drug_label aspirin` returned `DATA_NOT_FOUND` because the openFDA aspirin labels are name-indexed, not RxCUI-indexed. The fallback strategy is exercised by helper-level unit tests covering the hit / fallback / both-empty / upstream-error branches.
+While preparing v0.2.0 for release, clinical-quality testing through the new interactive demo surfaced critical bugs in the v0.1.x line. Rather than ship the demo against a v0.1.x backend that 404s on common drugs, the fixes are folded into v0.2.0:
+
+- **`lookup_adverse_events`, `get_drug_label`, `check_interactions`, and `get_dosing_reference` query construction.** The v0.1.x line queried openFDA only by RxCUI (e.g. `openfda.rxcui:"11289"` for warfarin, `patient.drug.openfda.rxcui:"11289"` for FAERS). openFDA stores RxCUIs at the SCD/SBD clinical-product level, not the IN-level returned by RxNorm — warfarin's labels carry RxCUIs like 855288, never 11289 — and many older FAERS reports predate RxCUI annotation entirely. The pre-deploy demo screenshots showed `lookup_adverse_events warfarin`, `check_interactions warfarin,aspirin`, `get_drug_label aspirin`, and `get_dosing_reference warfarin` all returning `DATA_NOT_FOUND`. v0.2.0 replaces the single-field search with a single Lucene OR-query covering both indices in one round-trip:
+
+  ```
+  openfda.rxcui:"<rxcui>" OR openfda.generic_name:"<lower(name)>"
+  ```
+
+  (events use the `patient.drug.openfda.*` prefixed paths.) Verified live: warfarin's FAERS query now returns "INTERNATIONAL NORMALISED RATIO INCREASED" as the top reaction with 10,374 reports. Hardcoded URL encoding avoids the v0.1.3 RxNav `+ → %2B` bug class.
+
+- **Error message sanitization.** v0.1.x returned errors like `"Not found at https://api.fda.gov/drug/event.json?search=patient.drug.openfda.rxcui%3A%2211289%22..."` — raw URL plumbing leaked into the user-facing message. v0.2.0 splits the audience: `error.message` uses clinical-domain language naming the upstream service ("No matching records found in openFDA", "Upstream service RxNav rate-limited the request"); the full URL, status, and upstream label live in `error.details` for engineers debugging.
+
+- **FAERS-limitations rendering.** Successful `lookup_adverse_events` responses now carry a required `limitations` field populated from a central `FAERS_LIMITATIONS` constant in `src/lib/safety.ts`. The demo and CLI render this in a yellow callout *above* the events list — a viewer reads "FAERS counts do not establish causation" before reading "DEATH: 1,339 reports", not after. Shipping FAERS counts without their interpretation guardrails is a safety issue, not a UX nicety. v0.1.x consumers see one new field on the success envelope; backward-compatible.
+
+- **Live-API integration tests.** `tests/integration/live-api.test.ts` (gated behind `RUN_LIVE_TESTS=1`, run via `pnpm test:live`) hits real openFDA + RxNav across the same handlers MCP/HTTP/CLI use, covering 10 common drugs across all 6 tools. Default `pnpm test` stays fast and offline-capable. Future nightly CI runs `pnpm test:live` to detect upstream API drift before users do.
+
+The lesson the v0.1.x line teaches: mock-only unit tests are necessary but not sufficient for boundary code. Query construction has to be validated against the real API surface, not just against assumptions about it. The live-API suite is the structural fix.
 
 ### What's not changed
 
