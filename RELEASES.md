@@ -1,6 +1,28 @@
 # Releases
 
+## v0.1.3 — 2026-04-27
+
+A third post-launch patch on the same Sunday, completing the chain that began with v0.1.1. After v0.1.2 unblocked the resolver, `lookup_drug aspirin` reached its downstream RxNav calls and immediately failed with `UPSTREAM_ERROR` (HTTP 400) on the `related.json` fetch. The cause was a subtle URL-encoding bug that affected `lookup_drug` and `find_alternatives`. v0.1.3 fixes it.
+
+### Fixed since v0.1.2
+
+- **`lookup_drug` and `find_alternatives` now reach RxNav successfully.** Two URL builders used `URLSearchParams` to set list-valued query params (`tty`, `ttys`), which percent-encoded the literal `+` separator to `%2B`. RxNav requires the bare `+` and rejects `%2B` with 400. The builders now concatenate these specific list params directly so the `+` survives to the wire. TTY values are ASCII alphanumeric, so no encoding is needed. ([8794dd9](https://github.com/shaddyt/clinical-reference-mcp/commit/8794dd9))
+
+The Phase 2 tests for these URLs asserted on the parsed form via `URL.searchParams.get()`, which decodes `%2B` back to `+` — masking the on-the-wire bug for over a year of test runs. The strengthened regression tests now check the raw URL string for `tty=IN+BN` / `ttys=IN+PIN` and assert `%2B` is absent, locking the on-the-wire contract.
+
+### What's in v0.1.3
+
+Same six tools and three transports as prior releases. Public contracts (tool names, input schemas, response envelopes, CLI commands) are unchanged.
+
+### Acknowledgments
+
+Same upstream sources as prior versions ([NOTICE](NOTICE)).
+
+---
+
 ## v0.1.2 — 2026-04-27
+
+_Superseded by v0.1.3, which fixes a downstream RxNav URL-encoding bug surfaced by the v0.1.2 smoke test. Install `@shaddyt/clinical-reference-mcp@latest` to get v0.1.3._
 
 A second post-launch patch on the same Sunday, addressing a follow-on bug surfaced by the v0.1.1 smoke test. Once name-less candidates were filtered (v0.1.1), `lookup_drug` for common drugs like `aspirin` started returning `AMBIGUOUS_QUERY` — because RxNav returns one row per terminology source (USP, RXNORM, VANDF, MMSL) for the same drug, all sharing one RxCUI but varying in case-folding of the name. v0.1.2 collapses these to a single resolved match.
 
