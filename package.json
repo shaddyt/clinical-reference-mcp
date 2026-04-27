@@ -55,6 +55,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:live": "RUN_LIVE_TESTS=1 vitest run tests/integration/live-api.test.ts",
     "deploy:worker": "wrangler deploy",
     "validate:pack": "pnpm build && bash scripts/validate-pack.sh",
     "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
