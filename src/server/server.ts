@@ -17,81 +17,11 @@ import {
 import type { ToolResponse } from '../lib/respond';
 import { VERSION } from '../lib/version';
 import {
-  checkInteractionsDefinition,
-  checkInteractionsHandler,
-} from './tools/check-interactions';
-import {
-  findAlternativesDefinition,
-  findAlternativesHandler,
-} from './tools/find-alternatives';
-import {
-  getDosingReferenceDefinition,
-  getDosingReferenceHandler,
-} from './tools/get-dosing-reference';
-import {
-  getDrugLabelDefinition,
-  getDrugLabelHandler,
-} from './tools/get-drug-label';
-import {
-  lookupAdverseEventsDefinition,
-  lookupAdverseEventsHandler,
-} from './tools/lookup-adverse-events';
-import {
-  lookupDrugDefinition,
-  lookupDrugHandler,
-} from './tools/lookup-drug';
-
-interface ToolDefinition {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: Parameters<typeof toJsonSchemaCompat>[0];
-}
-
-interface ToolEntry {
-  readonly definition: ToolDefinition;
-  readonly handler: (input: unknown) => Promise<ToolResponse<unknown>>;
-}
-
-// Registry order = the order tools are advertised over the wire and exercised
-// in tests. Adding a tool means one new entry here; ListTools and CallTool
-// dispatch both walk this object. The `as const satisfies` keeps the literal
-// key set so dispatch can index without widening to `string | undefined`.
-const TOOL_REGISTRY = {
-  lookup_drug: {
-    definition: lookupDrugDefinition,
-    handler: lookupDrugHandler,
-  },
-  get_drug_label: {
-    definition: getDrugLabelDefinition,
-    handler: getDrugLabelHandler,
-  },
-  check_interactions: {
-    definition: checkInteractionsDefinition,
-    handler: checkInteractionsHandler,
-  },
-  find_alternatives: {
-    definition: findAlternativesDefinition,
-    handler: findAlternativesHandler,
-  },
-  lookup_adverse_events: {
-    definition: lookupAdverseEventsDefinition,
-    handler: lookupAdverseEventsHandler,
-  },
-  get_dosing_reference: {
-    definition: getDosingReferenceDefinition,
-    handler: getDosingReferenceHandler,
-  },
-} as const satisfies Record<string, ToolEntry>;
-
-export type ToolName = keyof typeof TOOL_REGISTRY;
-
-export const TOOL_NAMES: readonly ToolName[] = Object.keys(
   TOOL_REGISTRY,
-) as ToolName[];
-
-function isToolName(name: string): name is ToolName {
-  return Object.prototype.hasOwnProperty.call(TOOL_REGISTRY, name);
-}
+  dispatchTool,
+  isToolName,
+  type ToolEntry,
+} from './tools/registry';
 
 function describeTool(entry: ToolEntry): Tool {
   // toJsonSchemaCompat returns a generic Record<string, unknown>; for an
@@ -146,7 +76,7 @@ export function buildServer(): Server {
     if (!isToolName(name)) {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
-    const result = await TOOL_REGISTRY[name].handler(args);
+    const result = await dispatchTool(name, args);
     return toCallToolResult(result);
   });
 
