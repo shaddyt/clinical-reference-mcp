@@ -38,6 +38,11 @@ export const ToolErrorSchema = z.object({
   // tried again later (429s, 5xx after retries exhausted, network failures).
   // Absent or false means the failure is structural and a retry won't help.
   retryable: z.boolean().optional(),
+  // Free-form structured context attached to specific error cases. Used today
+  // by the HTTP /api/tool/:name route to return the list of valid tool names
+  // alongside an unknown-tool INVALID_INPUT, so client UIs can render
+  // "did you mean...?" suggestions without re-parsing the message string.
+  details: z.record(z.unknown()).optional(),
 });
 
 // ---------- Shared field validators ----------

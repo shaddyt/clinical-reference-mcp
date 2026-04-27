@@ -10,8 +10,20 @@ import { cors } from 'hono/cors';
 import { DISCLAIMER, HTTP_DISCLAIMER_HEADER } from '../lib/safety';
 import { VERSION } from '../lib/version';
 import { buildServer } from './server';
+import {
+  TOOL_NAMES,
+  dispatchTool,
+  isToolName,
+} from './tools/registry';
 
 const HEALTH_SOURCES = ['openFDA', 'RxNorm', 'RxNav'] as const;
+
+// Marker on every /api/tool/:name response so anyone discovering the route
+// (curl, Postman, copy-pasted demo URL) knows it isn't part of the MCP spec
+// and shouldn't be relied on by MCP clients. The MCP-compliant entry point
+// is POST /mcp; this route exists to back the in-browser interactive demo.
+export const API_NOTE_HEADER = 'X-API-Note';
+export const API_NOTE_VALUE = 'demo-backend; not-part-of-mcp-spec';
 
 // Single-screen developer landing page. Intentionally minimal: explains
 // what the service is, how to connect, surfaces the disclaimer, and links
@@ -57,7 +69,12 @@ export function buildHttpApp(): Hono {
       origin: '*',
       allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'mcp-session-id', 'Last-Event-ID', 'mcp-protocol-version'],
-      exposeHeaders: ['mcp-session-id', 'mcp-protocol-version', HTTP_DISCLAIMER_HEADER],
+      exposeHeaders: [
+        'mcp-session-id', // MCP protocol session continuity
+        'mcp-protocol-version', // MCP protocol version negotiation
+        HTTP_DISCLAIMER_HEADER, // Disclaimer text on every response
+        API_NOTE_HEADER, // Demo-backend signaling on /api/tool routes
+      ],
     }),
   );
 
@@ -79,6 +96,68 @@ export function buildHttpApp(): Hono {
       sources: HEALTH_SOURCES,
     }),
   );
+
+  // Stamp every /api/* response with the demo-backend marker. Set as a
+  // route-prefix middleware (not on the global '*' chain) so MCP clients
+  // hitting /mcp don't see a header that doesn't apply to them.
+  app.use('/api/*', async (c, next) => {
+    c.header(API_NOTE_HEADER, API_NOTE_VALUE);
+    await next();
+  });
+
+  // POST /api/tool/:name — thin HTTP wrapper around dispatchTool() so the
+  // in-browser demo at GET / can invoke tools without speaking JSON-RPC.
+  // Not part of the MCP spec; the X-API-Note header announces that on every
+  // response. Reuses the same handler registry as /mcp, so behavior never
+  // diverges between the two surfaces.
+  app.post('/api/tool/:name', async (c) => {
+    const name = c.req.param('name');
+
+    if (!isToolName(name)) {
+      // Unknown tool names are routing-level INVALID_INPUT — the URL param
+      // is technically input, and 404 carries the routing semantic. The
+      // structured `details.validTools` list lets a client UI render
+      // "did you mean...?" without re-parsing the message string.
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_INPUT' as const,
+            message: `Unknown tool name: '${name}'. Valid tools: ${TOOL_NAMES.join(', ')}.`,
+            details: { validTools: [...TOOL_NAMES] },
+          },
+          disclaimer: DISCLAIMER,
+        },
+        404,
+      );
+    }
+
+    let input: unknown;
+    try {
+      input = await c.req.json();
+    } catch {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_INPUT' as const,
+            message:
+              'Request body must be a JSON object matching the tool input schema.',
+          },
+          disclaimer: DISCLAIMER,
+        },
+        400,
+      );
+    }
+
+    // Dispatch returns the raw envelope. Tool-level errors (validation
+    // failures, DATA_NOT_FOUND, AMBIGUOUS_QUERY, UPSTREAM_ERROR) come back
+    // as ok:false with a 200 — the HTTP request itself succeeded; the
+    // domain returned a structured error. Mirrors how /mcp wraps tool
+    // errors as `isError: true` content rather than HTTP failures.
+    const result = await dispatchTool(name, input);
+    return c.json(result);
+  });
 
   // Stateless mode — each request gets a fresh transport + server. This is
   // the pattern the SDK's own Hono example documents and lets us redeploy
